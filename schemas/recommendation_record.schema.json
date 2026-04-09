@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RecommendationRecord",
+  "allOf": [
+    {
+      "$ref": "./base_record.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "recommendation_text"
+      ],
+      "properties": {
+        "recommendation_text": {
+          "type": "string"
+        },
+        "priority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "due_date": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}
+

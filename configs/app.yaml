@@ -1,0 +1,25 @@
+patient_id: self
+timezone: Europe/Moscow
+
+processing:
+  mode: agent_session
+  inbox_dir: data/raw/inbox
+  archive_dir: data/raw/archive
+  rejected_dir: data/raw/rejected
+
+classification:
+  doc_types:
+    - lab
+    - doctor_conclusion
+    - medication
+    - symptom_event
+    - recommendation
+    - attachment
+
+hypotheses:
+  enabled: true
+  min_supporting_evidence: 1
+
+audit:
+  enabled: true
+  logs_dir: data/audit/logs

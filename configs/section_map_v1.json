@@ -1,0 +1,209 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-04-08",
+  "description": "Universal section map for document parsing and canonical mapping.",
+  "doc_types": {
+    "doctor_consultation": {
+      "required_sections": [
+        "conclusion"
+      ],
+      "optional_sections": [
+        "complaints",
+        "anamnesis",
+        "objective",
+        "diagnosis",
+        "recommendations",
+        "medications",
+        "plan",
+        "follow_up"
+      ],
+      "section_aliases": {
+        "complaints": [
+          "жалобы",
+          "complaints"
+        ],
+        "anamnesis": [
+          "анамнез",
+          "история настоящего заболевания",
+          "history of present illness"
+        ],
+        "objective": [
+          "объективно",
+          "осмотр",
+          "objective"
+        ],
+        "diagnosis": [
+          "диагноз",
+          "заключение по диагнозу",
+          "diagnosis"
+        ],
+        "conclusion": [
+          "заключение",
+          "врачебное заключение",
+          "conclusion"
+        ],
+        "recommendations": [
+          "рекомендации",
+          "общие рекомендации",
+          "recommendations"
+        ],
+        "medications": [
+          "назначения",
+          "медикаментозная терапия",
+          "therapy",
+          "prescription"
+        ],
+        "plan": [
+          "план лечения",
+          "план обследования",
+          "plan"
+        ],
+        "follow_up": [
+          "повторная явка",
+          "контроль",
+          "follow up"
+        ]
+      },
+      "canonical_mapping": [
+        {
+          "section": "conclusion",
+          "target": "doctor_conclusions.conclusion_text",
+          "mode": "append_unique"
+        },
+        {
+          "section": "diagnosis",
+          "target": "doctor_conclusions.diagnosis_text",
+          "mode": "append_unique"
+        },
+        {
+          "section": "recommendations",
+          "target": "recommendations.recommendation_text",
+          "mode": "append_unique"
+        },
+        {
+          "section": "medications",
+          "target": "medications.instructions",
+          "mode": "split_items"
+        },
+        {
+          "section": "complaints",
+          "target": "symptoms_events.description",
+          "mode": "split_items"
+        }
+      ],
+      "anti_duplication_rules": [
+        {
+          "name": "recommendation_should_not_repeat_in_conclusion",
+          "left": "doctor_conclusions.conclusion_text",
+          "right": "recommendations.recommendation_text",
+          "action": "remove_contained_right_from_left",
+          "severity": "blocker"
+        }
+      ]
+    },
+    "lab_report": {
+      "required_sections": [
+        "lab_table"
+      ],
+      "optional_sections": [
+        "patient_info",
+        "encounter_info",
+        "specimen",
+        "methodology",
+        "notes"
+      ],
+      "section_aliases": {
+        "lab_table": [
+          "параметр",
+          "результат",
+          "референсные значения",
+          "reference range",
+          "unit"
+        ],
+        "patient_info": [
+          "пациент",
+          "дата рождения",
+          "patient"
+        ],
+        "encounter_info": [
+          "отделение",
+          "врач",
+          "дата взятия образца",
+          "дата выдачи результата"
+        ],
+        "specimen": [
+          "биоматериал",
+          "образец",
+          "specimen"
+        ],
+        "methodology": [
+          "оборудование",
+          "анализ выполнен",
+          "method"
+        ]
+      },
+      "canonical_mapping": [
+        {
+          "section": "lab_table",
+          "target": "labs.sections",
+          "mode": "parse_markers"
+        },
+        {
+          "section": "encounter_info",
+          "target": "labs.encounter",
+          "mode": "structured_extract"
+        },
+        {
+          "section": "patient_info",
+          "target": "labs.patient",
+          "mode": "structured_extract"
+        }
+      ]
+    },
+    "imaging_report_mri": {
+      "required_sections": [
+        "findings",
+        "impression"
+      ],
+      "optional_sections": [
+        "protocol",
+        "recommendations"
+      ],
+      "section_aliases": {
+        "protocol": [
+          "протокол",
+          "protocol"
+        ],
+        "findings": [
+          "описание",
+          "данные исследования",
+          "findings"
+        ],
+        "impression": [
+          "заключение",
+          "impression"
+        ],
+        "recommendations": [
+          "рекомендации",
+          "recommendations"
+        ]
+      },
+      "canonical_mapping": [
+        {
+          "section": "impression",
+          "target": "doctor_conclusions.conclusion_text",
+          "mode": "append_unique",
+          "status": "needs_review"
+        },
+        {
+          "section": "recommendations",
+          "target": "recommendations.recommendation_text",
+          "mode": "append_unique"
+        }
+      ]
+    },
+    "imaging_report_xray": {
+      "inherits": "imaging_report_mri"
+    }
+  }
+}

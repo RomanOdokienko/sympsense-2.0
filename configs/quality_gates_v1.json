@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-04-08",
+  "description": "Baseline quality gates for recognition and canonical DB integrity.",
+  "thresholds": {
+    "source_path_missing_count_max": 0,
+    "missing_full_extraction_count_max": 0,
+    "multiple_full_extraction_count_max": 0,
+    "missing_required_domain_fact_count_max": 0,
+    "lab_reports_without_items_count_max": 0,
+    "missing_event_date_count_max": 0,
+    "mojibake_suspected_count_max": 0,
+    "duplicated_conclusion_recommendation_count_max": 0
+  },
+  "doc_type_requirements": {
+    "doctor_consultation": [
+      "doctor_conclusions"
+    ],
+    "lab_report": [
+      "labs"
+    ],
+    "imaging_report_mri": [
+      "doctor_conclusions"
+    ],
+    "imaging_report_xray": [
+      "doctor_conclusions"
+    ],
+    "imaging_report_ultrasound": [
+      "doctor_conclusions"
+    ]
+  },
+  "doc_type_prefix_requirements": {
+    "imaging_report_": [
+      "doctor_conclusions"
+    ]
+  },
+  "mojibake_detection": {
+    "min_text_length": 80,
+    "min_cyrillic_chars": 50,
+    "rs_ratio_threshold": 0.32,
+    "rare_chars_trigger_count": 8
+  }
+}

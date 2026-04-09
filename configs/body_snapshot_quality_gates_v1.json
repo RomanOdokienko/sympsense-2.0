@@ -1,0 +1,65 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-04-09",
+  "description": "Quality gates for body_snapshot integrity and regression control.",
+  "allowed_values": {
+    "qa_status": [
+      "ok",
+      "needs_review"
+    ],
+    "link_priority": [
+      "high",
+      "medium",
+      "low"
+    ],
+    "relation_type": [
+      "same_doc",
+      "time_proximity_45d"
+    ]
+  },
+  "thresholds": {
+    "missing_required_files_count_max": 0,
+    "summary_mismatch_count_max": 0,
+    "dangling_link_refs_count_max": 0,
+    "cluster_unknown_mentions_count_max": 0,
+    "cluster_duplicate_mentions_count_max": 0,
+    "unclustered_conditions_count_max": 0,
+    "invalid_qa_status_count_max": 0,
+    "invalid_link_priority_count_max": 0,
+    "invalid_relation_type_count_max": 0,
+    "invalid_icd_code_count_max": 0,
+    "suspicious_spine_level_icd_count_max": 0,
+    "dropped_orphan_facts_count_max": 0,
+    "conditions_without_links_share_max": 0.35,
+    "investigations_without_links_share_max": 0.3,
+    "links_per_condition_min": 1.2,
+    "links_per_condition_max": 4.0,
+    "clusters_per_condition_min": 0.15,
+    "clusters_per_condition_max": 0.85,
+    "high_priority_share_min": 0.05,
+    "high_priority_share_max": 0.55,
+    "low_priority_share_max": 0.55
+  },
+  "regression": {
+    "enabled": true,
+    "count_metrics_max_increase": {
+      "dangling_link_refs_count": 0,
+      "cluster_unknown_mentions_count": 0,
+      "cluster_duplicate_mentions_count": 0,
+      "unclustered_conditions_count": 0,
+      "invalid_qa_status_count": 0,
+      "invalid_link_priority_count": 0,
+      "invalid_relation_type_count": 0,
+      "invalid_icd_code_count": 0,
+      "suspicious_spine_level_icd_count": 0
+    },
+    "ratio_metrics_max_relative_drop": {
+      "links_per_condition": 0.45,
+      "high_priority_share": 0.65
+    },
+    "ratio_metrics_max_absolute_delta": {
+      "clusters_per_condition": 0.3,
+      "low_priority_share": 0.3
+    }
+  }
+}

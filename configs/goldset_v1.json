@@ -1,0 +1,90 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-04-08",
+  "description": "Representative docs for quality verification before scaling batch runs.",
+  "documents": [
+    {
+      "doc_id": "doc_57055024fe7fea37",
+      "expected_doc_type": "doctor_consultation",
+      "required_entities": [
+        "doctor_conclusions",
+        "recommendations"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_7ff3393003441ae3",
+      "expected_doc_type": "doctor_consultation",
+      "required_entities": [
+        "doctor_conclusions",
+        "recommendations"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_4604e395c089b215",
+      "expected_doc_type": "doctor_consultation",
+      "required_entities": [
+        "doctor_conclusions",
+        "recommendations"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_3c1176c499fb16ff",
+      "expected_doc_type": "doctor_consultation",
+      "required_entities": [
+        "doctor_conclusions"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_9baa15b715a1856e",
+      "expected_doc_type": "lab_report",
+      "required_entities": [
+        "labs"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_e3bd3e641b6640d8",
+      "expected_doc_type": "lab_report",
+      "required_entities": [
+        "labs"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_69d26205d8784c9d",
+      "expected_doc_type": "lab_report",
+      "required_entities": [
+        "labs"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_184cb6ff7971ae41",
+      "expected_doc_type": "imaging_report_mri",
+      "required_entities": [
+        "doctor_conclusions"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_00a6e013759a1dc6",
+      "expected_doc_type": "imaging_report_xray",
+      "required_entities": [
+        "doctor_conclusions"
+      ],
+      "must_have_clean_text": true
+    },
+    {
+      "doc_id": "doc_36e25e554c7ddcce",
+      "expected_doc_type": "imaging_report_xray",
+      "required_entities": [
+        "doctor_conclusions"
+      ],
+      "must_have_clean_text": true
+    }
+  ]
+}

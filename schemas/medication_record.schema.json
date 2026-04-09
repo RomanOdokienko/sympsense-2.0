@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MedicationRecord",
+  "allOf": [
+    {
+      "$ref": "./base_record.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "dosage": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}
+

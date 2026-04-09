@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LabRecord",
+  "allOf": [
+    {
+      "$ref": "./base_record.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "marker_name",
+        "value"
+      ],
+      "properties": {
+        "marker_name": {
+          "type": "string"
+        },
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference_range": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "abnormal_flag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}
+

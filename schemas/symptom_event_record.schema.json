@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SymptomEventRecord",
+  "allOf": [
+    {
+      "$ref": "./base_record.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "symptom"
+      ],
+      "properties": {
+        "symptom": {
+          "type": "string"
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}
+

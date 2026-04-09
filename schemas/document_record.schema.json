@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DocumentRecord",
+  "allOf": [
+    {
+      "$ref": "./base_record.schema.json"
+    },
+    {
+      "type": "object",
+      "required": [
+        "doc_type",
+        "parse_status"
+      ],
+      "properties": {
+        "doc_type": {
+          "type": "string"
+        },
+        "parse_status": {
+          "type": "string"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "batch_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  ]
+}
+
