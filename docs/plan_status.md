@@ -59,6 +59,89 @@
   - `scripts/quality/run_body_snapshot_quality_gates_v1.py`
   - `configs/body_snapshot_quality_gates_v1.json`
   - актуальный отчет: `data/derived/reports/body_snapshot_quality_gates_v1_20260409T150506Z.json`
+- [x] Добавлен минимальный backend API-слой (read-only) поверх локального canonical/facts:
+  - `apps/cli/src/sympsense/api_server.py`
+  - `sympsense serve-api --host 127.0.0.1 --port 8000`
+  - docs: `docs/08_local_api.md`
+- [x] Documents Review UI переведен на backend-driven загрузку:
+  - список/фильтрация через `GET /v1/review/documents`
+  - карточка документа через `GET /v1/review/documents/{doc_id}`
+  - удаление/выдача файлов сохранены через UI server (`/api/delete`, `/api/file`)
+- [x] UI и API объединены в один процесс (`8000`):
+  - UI доступен на `GET /ui` того же FastAPI
+  - delete/file операции перенесены в FastAPI (`/api/delete`, `/api/file`)
+  - второй процесс (`8765`) больше не обязателен
+- [x] Добавлена единая точка мониторинга quality в API/UI:
+  - `GET /v1/quality/latest`
+  - в UI выведен верхнеуровневый статус quality-gates (`pass/fail/unknown`) и счетчики падений
+- [x] Добавлен системный self-check (CLI + API):
+  - `sympsense selfcheck`
+  - `POST /v1/selfcheck/run`
+  - `GET /v1/selfcheck/latest`
+  - selfcheck валидирует артефакты, link/cluster integrity и статусы quality-gates
+- [x] Добавлен аналитический графовый endpoint для downstream-моделей:
+  - `GET /v1/analytics/body-graph`
+  - экспортирует граф `condition_cluster -> investigation -> document`
+  - поддерживает фильтры `include_needs_review`, `min_link_confidence`, `link_priorities`
+- [x] В UI добавлен базовый аналитический обзор и fact-review очередь:
+  - `Analytics Snapshot` на базе `GET /v1/analytics/body-graph`
+  - `Fact Review Queue` на базе `GET /v1/review/fact-queue`
+  - быстрый переход из queue в карточку соответствующего документа
+- [x] Fact-review очередь стала операционной:
+  - `POST /v1/review/fact-queue/decision` (`resolved|skipped|reopened`)
+  - решения сохраняются в `data/canonical/facts/fact_review_decisions_v1.ndjson`
+  - решения аудируются в `data/audit/logs/batch_01_agent.ndjson`
+- [x] Analytics UI получил cluster drill-down:
+  - выбор кластера состояний в `Analytics Snapshot`
+  - быстрый просмотр связанных исследований и документов
+  - быстрый переход в карточку документа из drill-down
+- [x] UI упрощен под операционный сценарий:
+  - разделен на вкладки `Documents / Review / Analytics`
+  - дефолтный фильтр в `Documents`: `needs_review only`
+  - технические поля в карточке документа свернуты в `Technical extraction details`
+- [x] Выполнен авто-triage round1 для review-очереди:
+  - автоматически `skipped` 31 слабых `condition_investigation_links`
+  - критерий: `relation_type=time_proximity_45d` и `confidence<0.62`
+  - отчет: `data/derived/reports/fact_queue_auto_triage_v1_*.json`
+- [x] Выполнен авто-triage round2 для review-очереди:
+  - `skipped` оставшиеся 39 temporal-only links (`condition_investigation_links`)
+  - `resolved` 20 `clinical_findings` с единственной причиной `no_icd_like_code`
+  - `resolved` 20 парных `condition_mentions` для этих clinical-фактов
+  - после round2 в open очереди осталось 84 кейса (`lab_results=60`, `medication_items=24`)
+- [x] Выполнен round3 + parser cleanup для `lab_results`:
+  - в `scripts/facts/build_fact_layer_v1.py` улучшена нормализация `parameter/reference` и правило `unparsed_result`
+  - пересобраны `fact_layer_v1` и `body_snapshot_v1`
+  - оставшиеся 24 `medication_items` (non-priority слой) помечены как `skipped`
+  - open fact-review queue сокращена до `0`
+- [x] Выполнен domain cleanup по паразитарному блоку:
+  - исключены condition-упоминания с терминами `гельминт/глист/лямбли/токсокар/инваз` на этапе `clinical_facts`
+  - пересобраны `fact_layer_v1` и `body_snapshot_v1`; в `condition_clusters`/analytics term hits = 0
+  - после пересборки закрыты хвостовые temporal-only links; open queue снова = `0`
+- [x] Исправлен дефект удаления документа через UI:
+  - после `api/delete` автоматически запускается пересборка `fact_layer`, `body_snapshot` и UI
+  - в ответе delete возвращается `rebuild.ok`, UI показывает ошибку если пересборка не прошла
+- [x] Добавлен продуктовый артефакт `patient_briefing_v1`:
+  - сборка JSON+HTML из canonical/facts (`top domains`, `condition clusters`, `lab attention`, `recent investigations`)
+  - CLI: `sympsense patient-briefing`
+  - API: `GET/POST /v1/reports/patient-briefing/v1*`
+- [x] `patient_briefing_v1` выведен в UI:
+  - новая вкладка `Briefing` в `Sympsense Review UI`
+  - загрузка сводки через `GET /v1/reports/patient-briefing/v1`
+  - кнопка `rebuild report` через `POST /v1/reports/patient-briefing/v1/build`
+- [x] Добавлен curated-слой `problem_list_v1` (полезный для реального use-case):
+  - категории: `stable_problem`, `episodic_condition`, `symptom_or_state`, `uncertain`
+  - CLI: `sympsense problem-list`
+  - API: `GET/POST /v1/facts/problem-list/v1*`
+  - выведен в UI (`Briefing`) как отдельный блок `stable/uncertain`
+  - включен в rebuild-пайплайн после удаления документа
+- [x] Зафиксирован стабильный downstream export-контракт:
+  - `GET /v1/export/downstream-v1` (read payload)
+  - `POST /v1/export/downstream-v1/build` (запись snapshot-отчета)
+  - `sympsense export-downstream` (CLI)
+- [x] Усилена чистота `current_state/clinical_findings`:
+  - служебные хвосты (типа `должно быть интерпретировано лечащим врачом...`) исключаются из проблемного списка;
+  - повторная защита в приоритизации не пускает шумовые `condition_monitor` в ключевую повестку;
+  - `patient_briefing` пересобран после правок.
 
 ## Focus (актуально)
 
@@ -68,6 +151,14 @@
 - Контроль качества по формальным gate-метрикам до масштабирования новых batch.
 - Понятная сводка: что извлечено, что проверено, что требует ручного ревью.
 - Приоритет качества: диагнозы/исследования/лабы/клинические выводы; medications — non-blocking слой.
+
+## Next TODO (после стабилизации текущей логики)
+
+- [ ] Вынести извлечение в переносимый `agent-first` pipeline для низкого годового потока (около 10 файлов/год):
+  - единая schema для `labs / consultations / imaging` без клинико-специфичных парсеров;
+  - обязательный QA-gate (`accepted / needs_review / rejected`) перед записью в canonical;
+  - fallback на multimodal/OCR только при провале quality-gate;
+  - profile-конфиг (`locale`, `date formats`, `units`, `aliases`) для легкого запуска у другого пользователя с иным форматом документов.
 
 ## Operational notes
 

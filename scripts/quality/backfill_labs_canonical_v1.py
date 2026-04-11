@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -42,7 +42,7 @@ def extract_patient_and_encounter(raw_text: str) -> tuple[dict[str, Any], dict[s
         "sex": None,
         "birth_date": None,
         "age_years": None,
-        "card_number": line_value(raw_text, ["№ карты", "N карты", "Номер карты"]) or None,
+        "card_number": line_value(raw_text, ["№ карты", "N карты", "Номер карты", "Карта"]) or None,
         "sample_number": line_value(raw_text, ["Номер пробы"]) or None,
     }
 
@@ -57,7 +57,7 @@ def extract_patient_and_encounter(raw_text: str) -> tuple[dict[str, Any], dict[s
 
     encounter = {
         "facility": line_value(raw_text, ["Отделение"]) or None,
-        "medical_organization": line_value(raw_text, ["Отделение"]) or None,
+        "medical_organization": line_value(raw_text, ["ЛПУ", "Отделение"]) or None,
         "department": None,
         "ordering_doctor": line_value(raw_text, ["Врач"]) or None,
         "sample_taken_at": line_value(raw_text, ["Дата взятия образца"]) or None,
@@ -84,69 +84,234 @@ def is_section_header(line: str) -> bool:
         "Серологическая диагностика",
         "Глистные инвазии",
         "Протозоозы",
+        "Гормональные исследования",
+        "Комплексные исследования",
     ]
-    line_l = line.lower()
-    return any(h.lower() in line_l for h in headers)
+    low = line.lower()
+    return any(h.lower() in low for h in headers)
 
 
 def should_skip_line(line: str) -> bool:
     low = line.lower()
     skip_tokens = [
-        "параметр результат референсные",
+        "наименование исследования",
+        "результат ед. изм.",
+        "нормальные значения",
+        "исследование - (",
         "исследованные биоматериалы",
         "анализы выполнены на оборудовании",
         "дата печати результата",
+        "номер заказа",
+        "№ направления",
+        "карта:",
+        "пациент",
+        "фамилия:",
+        "имя:",
+        "отчество:",
+        "врач кдл",
         "врач клинической",
         "фельдшер-лаборант",
         "исполнитель",
+        "рекомендации европейской ассоциации",
+        "уровень тестостерона",
         "страница",
         "стр.",
     ]
     return any(token in low for token in skip_tokens)
 
 
+def normalize_table_line(line: str) -> str:
+    src = clean_text(line)
+    if not src:
+        return ""
+    return src
+
+
+def _to_float(value: str) -> float | None:
+    try:
+        return float(value.replace(",", "."))
+    except Exception:
+        return None
+
+
+def _split_glued_high_and_result(low_raw: str, tail_raw: str) -> tuple[str, str] | None:
+    low_val = _to_float(low_raw)
+    candidates: list[tuple[int, str, str]] = []
+    for idx in range(1, len(tail_raw)):
+        high_raw = tail_raw[:idx]
+        res_raw = tail_raw[idx:]
+        if not re.fullmatch(r"\d+(?:[.,]\d+)?", high_raw):
+            continue
+        if not re.fullmatch(r"\d+(?:[.,]\d+)?", res_raw):
+            continue
+        high_val = _to_float(high_raw)
+        res_val = _to_float(res_raw)
+        if high_val is None or res_val is None:
+            continue
+
+        score = 0
+        dec_h = len(high_raw.split(".")[-1]) if "." in high_raw else (len(high_raw.split(",")[-1]) if "," in high_raw else 0)
+        dec_r = len(res_raw.split(".")[-1]) if "." in res_raw else (len(res_raw.split(",")[-1]) if "," in res_raw else 0)
+        if dec_h in (1, 2):
+            score += 2
+        elif dec_h == 0:
+            score += 1
+        else:
+            score -= 2
+        if 0 <= dec_r <= 4:
+            score += 1
+        if low_val is not None and low_val <= high_val:
+            score += 2
+        else:
+            score -= 6
+        if low_val is not None and low_val <= res_val <= high_val:
+            score += 7
+        else:
+            score -= 2
+        if high_val > 0 and res_val > (high_val * 5):
+            score -= 3
+        candidates.append((score, high_raw, res_raw))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    _, high_raw, res_raw = candidates[0]
+    return high_raw, res_raw
+
+
 def parse_quant_line(line: str) -> dict[str, Any] | None:
-    line = clean_text(line)
-    # OCR often glues unit and parameter: "...ммоль/лМочевая..." -> "...ммоль/л Мочевая..."
-    line = re.sub(
-        r"(ммоль/л|мкмоль/л|г/л|мг/л|ед/л|Ед/л|10\^?\d+/л|в п/зр)([A-ZА-ЯЁ])",
-        r"\1 \2",
-        line,
-    )
+    line = normalize_table_line(line)
     if not line:
         return None
+    low = line.lower()
+    if "нет значения" in low or "не обнаружено" in low or "рекомендации" in low:
+        return None
 
-    ref_match = re.search(
-        r"(\d+[,.]?\d*\s*-\s*\d+[,.]?\d*(?:\s*(?:ммоль/л|мкмоль/л|г/л|мг/л|ед/л|Ед/л|10\^?\d+/л|в п/зр|%))?)",
-        line,
+    unit_pat = (
+        r"(?:"
+        r"нмоль/л|мкмоль/л|ммоль/л|мг/дл|мг/л|г/л|"
+        r"мкг/дл|мкг/л|мме/мл|мме/л|ме/мл|ед/л|u/l|пг|"
+        r"10\^?\d+/л|в п/зр|%|пг/мл|нг/мл|млн/мкл|фл"
+        r")"
     )
-    result_match = re.search(r"([↑↓]?\s*-?\d+[,.]?\d*)\s*$", line)
-    if not ref_match or not result_match:
-        return None
-    if result_match.start() <= ref_match.end():
+    m = re.search(
+        rf"(?P<param>.+?)\s+(?P<unit>{unit_pat})\s+"
+        r"(?P<ref>\d+[,.]?\d*\s*-\s*\d+[,.]?\d*)\s+"
+        r"(?P<result>[↑↓]?\s*-?\d+[,.]?\d*)$",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        parameter = clean_text(m.group("param"))
+        if len(parameter) < 3:
+            return None
+        if not re.search(r"[A-Za-zА-Яа-яЁё]", parameter):
+            return None
+        if "наименование исследования" in parameter.lower():
+            return None
+        return {
+            "parameter": parameter,
+            "result": clean_text(m.group("result")),
+            "reference": clean_text(m.group("ref")),
+            "unit": clean_text(m.group("unit")),
+        }
+
+    # Glued case: unit + low-highResult (without separator between high and result)
+    m2 = re.search(
+        rf"(?P<param>.+?)\s+(?P<unit>{unit_pat})\s+"
+        r"(?P<low>\d+[,.]?\d*)-(?P<tail>\d[\d.,]+)$",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if not m2:
         return None
 
-    parameter = clean_text(line[ref_match.end(): result_match.start()])
-    if len(parameter) < 2:
+    parameter = clean_text(m2.group("param"))
+    if len(parameter) < 3:
         return None
     if not re.search(r"[A-Za-zА-Яа-яЁё]", parameter):
         return None
+    if "наименование исследования" in parameter.lower():
+        return None
 
+    split = _split_glued_high_and_result(m2.group("low"), m2.group("tail"))
+    if not split:
+        return None
+    high_raw, result_raw = split
     return {
         "parameter": parameter,
-        "result": clean_text(result_match.group(1)),
-        "reference": clean_text(ref_match.group(1)),
-        "unit": None,
+        "result": clean_text(result_raw),
+        "reference": clean_text(f"{m2.group('low')}-{high_raw}"),
+        "unit": clean_text(m2.group("unit")),
+    }
+
+
+def parse_prefixed_quant_line(line: str) -> dict[str, Any] | None:
+    line = normalize_table_line(line)
+    if not line:
+        return None
+
+    unit_pat = (
+        r"(?:"
+        r"нмоль/л|мкмоль/л|ммоль/л|мг/дл|мг/л|г/л|"
+        r"мкг/дл|мкг/л|мме/мл|мме/л|ме/мл|ед/л|u/l|пг|"
+        r"10\^?\d+/л|в п/зр|%|пг/мл|нг/мл|млн/мкл|фл|мм/ч"
+        r")"
+    )
+    m = re.search(
+        rf"^(?P<ref>\d+[,.]?\d*\s*-\s*\d+[,.]?\d*)(?P<unit>{unit_pat})(?P<param>.+?)\s+(?P<result>[↑↓]?\s*-?\d+[,.]?\d*)$",
+        line,
+        flags=re.IGNORECASE,
+    )
+    if not m:
+        # Variant without explicit unit before analyte: "1,010 - 1,025SG (...) 1.025"
+        m = re.search(
+            r"^(?P<ref>\d+[.,]?\d*\s*-\s*\d+[.,]?\d*)(?P<param>(?:[A-ZА-ЯЁ]{1,10}\s*\([^)]+\)|[A-Za-zА-Яа-яЁё][A-Za-zА-Яа-яЁё0-9%\-_/().\s]+))\s+(?P<result>[↑↓]?\s*-?\d+[.,]?\d*)$",
+            line,
+            flags=re.IGNORECASE,
+        )
+        if not m:
+            return None
+        parameter = clean_text(m.group("param"))
+        if len(parameter) < 2 or not re.search(r"[A-Za-zА-Яа-яЁё]", parameter):
+            return None
+        return {
+            "parameter": parameter,
+            "result": clean_text(m.group("result")),
+            "reference": clean_text(m.group("ref")),
+            "unit": None,
+        }
+    parameter = clean_text(m.group("param"))
+    if len(parameter) < 2 or not re.search(r"[A-Za-zА-Яа-яЁё]", parameter):
+        return None
+    return {
+        "parameter": parameter,
+        "result": clean_text(m.group("result")),
+        "reference": clean_text(m.group("ref")),
+        "unit": clean_text(m.group("unit")),
     }
 
 
 def parse_qual_line(line: str) -> dict[str, Any] | None:
-    line = clean_text(line)
+    line = normalize_table_line(line)
     if not line or len(line) < 8:
         return None
 
+    low = line.lower()
+    # Pattern: "<parameter> Нет значения не обнаруженоне обнаружено"
+    if "нет значения" in low:
+        idx = low.find("нет значения")
+        param = clean_text(line[:idx])
+        tail = clean_text(line[idx + len("нет значения") :]).lower()
+        if len(param) >= 2 and re.search(r"[A-Za-zА-Яа-яЁё]", param):
+            if "не обнаруж" in tail:
+                return {"parameter": param, "result": "не обнаружено", "reference": "не обнаружено", "unit": None}
+            if "отрицательно" in tail:
+                return {"parameter": param, "result": "отрицательно", "reference": "отрицательно", "unit": None}
+
     qual_words = [
         "не обнаружены",
+        "не обнаружено",
         "не обнаружен",
         "отрицательно",
         "норма",
@@ -157,74 +322,23 @@ def parse_qual_line(line: str) -> dict[str, Any] | None:
         "отсутствуют",
         "отсутствует",
     ]
-    low = line.lower()
     if not any(q in low for q in qual_words):
         return None
     if re.search(r"\d+[,.]?\d*\s*-\s*\d+[,.]?\d*", line):
         return None
 
-    # Pattern: "<parameter> <result_word>".
     for q in qual_words:
         idx = low.rfind(q)
         if idx > 2:
             param = clean_text(line[:idx])
             res = clean_text(line[idx:])
             if len(param) >= 2 and re.search(r"[A-Za-zА-Яа-яЁё]", param):
-                return {
-                    "parameter": param,
-                    "result": res,
-                    "reference": None,
-                    "unit": None,
-                }
-
-    # Pattern: "<result_word><parameter><result_word>" (OCR glued).
-    for q in qual_words:
-        ql = q.lower()
-        if low.startswith(ql) and low.endswith(ql) and len(line) > (2 * len(q)) + 2:
-            mid = clean_text(line[len(q): len(line) - len(q)])
-            if len(mid) >= 2 and re.search(r"[A-Za-zА-Яа-яЁё]", mid):
-                return {
-                    "parameter": mid,
-                    "result": q,
-                    "reference": q,
-                    "unit": None,
-                }
-
-    # Pattern: "<result_word><parameter>" (OCR glued, no trailing repeated token).
-    for q in qual_words:
-        ql = q.lower()
-        if low.startswith(ql) and len(line) > len(q) + 2:
-            tail = clean_text(line[len(q):])
-            if len(tail) >= 2 and re.search(r"[A-Za-zА-Яа-яЁё]", tail):
-                return {
-                    "parameter": tail,
-                    "result": q,
-                    "reference": q,
-                    "unit": None,
-                }
+                return {"parameter": param, "result": res, "reference": None, "unit": None}
     return None
 
 
-def normalize_glued_qual_item(item: dict[str, Any]) -> dict[str, Any]:
-    parameter = clean_text(item.get("parameter"))
-    result = clean_text(item.get("result"))
-    reference = clean_text(item.get("reference")) if item.get("reference") else None
-
-    # Example: "не обнаруженыПростейшие" + result "не обнаружены"
-    if parameter and result and parameter.startswith(result) and len(parameter) > len(result):
-        tail = parameter[len(result):]
-        if tail and not tail[:1].isspace() and tail[:1].isupper():
-            tail = clean_text(tail.lstrip(":-–—,.;"))
-            if len(tail) >= 2 and re.search(r"[A-Za-zА-Яа-яЁё]", tail):
-                item["parameter"] = tail
-                item["result"] = result
-                item["reference"] = reference or result
-
-    return item
-
-
 def parse_simple_numeric_line(line: str) -> dict[str, Any] | None:
-    line = clean_text(line)
+    line = normalize_table_line(line)
     if not line:
         return None
 
@@ -241,6 +355,9 @@ def parse_simple_numeric_line(line: str) -> dict[str, Any] | None:
         "не обнаружено",
         "погранич",
         "обнаружено",
+        "рекомендации",
+        "наименование исследования",
+        "нормальные значения",
     ]
     if any(tok in low for tok in skip_tokens):
         return None
@@ -265,9 +382,117 @@ def parse_simple_numeric_line(line: str) -> dict[str, Any] | None:
     }
 
 
+def normalize_numeric_token(value: str | None) -> str | None:
+    if not value:
+        return value
+    token = clean_text(value).replace(",", ".")
+    if not re.fullmatch(r"[↑↓]?\s*-?\d+(?:\.\d+)?", token):
+        return value
+    arrow = ""
+    token = token.strip()
+    if token[:1] in {"↑", "↓"}:
+        arrow = token[:1]
+        token = token[1:].strip()
+    token = re.sub(r"^(-?)0+(?=\d)", r"\1", token)
+    if token.startswith("."):
+        token = "0" + token
+    return f"{arrow}{token}" if arrow else token
+
+
+def normalize_lab_item(item: dict[str, Any]) -> dict[str, Any]:
+    parameter = clean_text(item.get("parameter") or "")
+    original_parameter = parameter
+    low = parameter.lower()
+    if "(пцр)" in low and "днк " in low:
+        idx = low.rfind("днк ")
+        if idx != -1:
+            parameter = clean_text(parameter[idx:])
+    # Strip wrappers and broken tails in analyte names.
+    if parameter.startswith("(") and parameter.endswith(")") and len(parameter) > 2:
+        parameter = parameter[1:-1].strip()
+    if parameter.endswith(")") and "(" not in parameter:
+        parameter = parameter[:-1].strip()
+
+    item["result"] = normalize_numeric_token(item.get("result")) or item.get("result")
+
+    reference = clean_text(item.get("reference") or "")
+    # Handle glued qualitative prefix in parameter: "отрицательномкмоль/лBIL (билирубин)"
+    q = re.match(
+        r"^(?P<qual>отрицател\w*|положител\w*|норм\w*|не\s*обнаруж\w*|единич\w*)[A-Za-zА-Яа-яЁё0-9/%\^.,-]*?(?P<rest>(?:[A-ZА-ЯЁ]{2,8}\s*\([^)]+\)|[A-Za-zА-Яа-яЁё].+))$",
+        parameter,
+        flags=re.IGNORECASE,
+    )
+    if q:
+        qual = q.group("qual").lower()
+        parameter = clean_text(q.group("rest"))
+        core = re.search(r"([A-ZА-ЯЁ]{2,8}\s*\([^)]+\))", parameter)
+        if not core:
+            core = re.search(r"([A-ZА-ЯЁ]{2,8}\s*\([^)]+\))", original_parameter)
+        if core:
+            parameter = clean_text(core.group(1))
+        if not reference:
+            if qual.startswith("отриц"):
+                reference = "отрицательно"
+            elif qual.startswith("полож"):
+                reference = "положительно"
+            elif qual.startswith("норм"):
+                reference = "норма"
+            elif "обнаруж" in qual:
+                reference = "не обнаружено"
+            elif qual.startswith("единич"):
+                reference = "единично"
+
+    # Handle prefixed range+unit in parameter: "120 - 170г/лHGB (...)"
+    pref = re.match(
+        r"^(?P<ref>\d+[.,]?\d*\s*-\s*\d+[.,]?\d*)(?P<unit>[A-Za-zА-Яа-яЁё0-9/%\^]+)(?P<rest>[A-Za-zА-Яа-яЁё].+)$",
+        parameter,
+    )
+    if pref:
+        if not reference:
+            reference = clean_text(pref.group("ref"))
+        if not item.get("unit"):
+            item["unit"] = clean_text(pref.group("unit"))
+        parameter = clean_text(pref.group("rest"))
+
+    item["parameter"] = parameter
+
+    m = re.fullmatch(r"(\d+[.,]?\d*)\s*-\s*(\d+[.,]?\d*)", reference)
+    if m:
+        lo = normalize_numeric_token(m.group(1)) or m.group(1)
+        hi = normalize_numeric_token(m.group(2)) or m.group(2)
+        item["reference"] = f"{lo}-{hi}"
+    elif reference:
+        item["reference"] = reference
+    return item
+
+
 def parse_lab_sections(raw_text: str) -> list[dict[str, Any]]:
     lines = [clean_text(x) for x in raw_text.replace("\r", "\n").split("\n")]
     lines = [x for x in lines if x]
+
+    merged: list[str] = []
+    i = 0
+    while i < len(lines):
+        cur = lines[i]
+        if i + 1 < len(lines):
+            nxt = lines[i + 1]
+            continuation_line = (
+                cur.count("(") > cur.count(")")
+                and re.search(r"\)\s*[↑↓]?\s*-?\d+[.,]?\d*\s*$", nxt) is not None
+            ) or (
+                cur.endswith(" в")
+                and re.search(r"^[а-яё].+\)\s*[↑↓]?\s*-?\d+[.,]?\d*\s*$", nxt, flags=re.IGNORECASE) is not None
+            )
+            if "исследование - (" not in cur.lower() and parse_quant_line(cur) is None and (
+                parse_quant_line(nxt)
+                or ("нет значения" in nxt.lower() and parse_qual_line(f"{cur} {nxt}") is not None)
+                or continuation_line
+            ):
+                cur = f"{cur} {nxt}"
+                i += 1
+        merged.append(cur)
+        i += 1
+    lines = merged
 
     sections: list[dict[str, Any]] = []
     current = {"name": "Лабораторные показатели", "items": []}
@@ -284,11 +509,10 @@ def parse_lab_sections(raw_text: str) -> list[dict[str, Any]]:
         if should_skip_line(line):
             continue
 
-        item = parse_quant_line(line) or parse_qual_line(line) or parse_simple_numeric_line(line)
+        item = parse_quant_line(line) or parse_prefixed_quant_line(line) or parse_qual_line(line) or parse_simple_numeric_line(line)
         if item:
-            current["items"].append(normalize_glued_qual_item(item))
+            current["items"].append(normalize_lab_item(item))
 
-    # De-duplicate items within each section.
     for section in sections:
         seen: set[tuple[str, str, str]] = set()
         uniq: list[dict[str, Any]] = []
@@ -309,6 +533,27 @@ def parse_lab_sections(raw_text: str) -> list[dict[str, Any]]:
 
 def section_item_count(sections: list[dict[str, Any]]) -> int:
     return sum(len((s or {}).get("items") or []) for s in sections)
+
+
+def bad_item_count(sections: list[dict[str, Any]]) -> int:
+    bad = 0
+    for section in sections:
+        for item in (section or {}).get("items") or []:
+            parameter = clean_text(item.get("parameter") or "").lower()
+            result = clean_text(item.get("result") or "").lower()
+            if not parameter:
+                bad += 1
+                continue
+            if len(parameter) < 3:
+                bad += 1
+                continue
+            if "наименование исследования" in parameter:
+                bad += 1
+                continue
+            if "нормальные значения" in result:
+                bad += 1
+                continue
+    return bad
 
 
 def main() -> None:
@@ -355,7 +600,13 @@ def main() -> None:
         parsed_sections = parse_lab_sections(raw_text)
         parsed_count = section_item_count(parsed_sections)
 
-        final_sections = parsed_sections if parsed_count >= existing_count else existing_sections
+        existing_bad = bad_item_count(existing_sections)
+        parsed_bad = bad_item_count(parsed_sections)
+        prefer_parsed = parsed_count > 0 and (
+            parsed_count >= existing_count
+            or parsed_bad < existing_bad
+        )
+        final_sections = parsed_sections if prefer_parsed else existing_sections
         final_count = section_item_count(final_sections)
 
         patient, encounter, metadata = extract_patient_and_encounter(raw_text)
@@ -380,10 +631,7 @@ def main() -> None:
             "quality": quality,
         }
 
-        if existing_files:
-            out_path = existing_files[0]
-        else:
-            out_path = ctx.labs_dir / f"lab_full_doc_{stem}.json"
+        out_path = existing_files[0] if existing_files else (ctx.labs_dir / f"lab_full_doc_{stem}.json")
         save_json(out_path, payload)
 
         changed.append(

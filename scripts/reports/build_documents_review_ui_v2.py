@@ -1,442 +1,1477 @@
 from __future__ import annotations
 
-import html
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
 
 ROOT = Path(".")
-REGISTRY = ROOT / "data/canonical/documents/batch_01_registry_active.json"
-REPORTS_DIR = ROOT / "data/derived/reports"
-QUALITY_CFG = ROOT / "configs/quality_gates_v1.json"
 OUT = ROOT / "data/derived/reports/ui_documents_registry.html"
 OUT_DATA = ROOT / "data/derived/reports/ui_documents_registry_data.json"
 
 
-def load_json(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def read_json_files(directory: Path) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    if not directory.exists():
-        return out
-    for p in sorted(directory.glob("*.json")):
-        try:
-            out.append(load_json(p))
-        except Exception:
-            continue
-    return out
-
-
-def expected_entities(doc_type: str, cfg: dict[str, Any]) -> list[str]:
-    exact = cfg.get("doc_type_requirements", {})
-    if doc_type in exact:
-        return list(exact[doc_type])
-    for prefix, entities in cfg.get("doc_type_prefix_requirements", {}).items():
-        if doc_type.startswith(prefix):
-            return list(entities)
-    return []
-
-
-def compute_review_flags(
-    doctor_records: list[dict[str, Any]],
-    recommendation_records: list[dict[str, Any]],
-    labs_records: list[dict[str, Any]],
-    full_extraction: dict[str, Any] | None,
-) -> dict[str, Any]:
-    doctor_needs_review = any(str(x.get("status") or "").strip() == "needs_review" for x in doctor_records)
-    recommendations_needs_review = any(str(x.get("status") or "").strip() == "needs_review" for x in recommendation_records)
-    labs_review_required = any(bool((x.get("quality") or {}).get("review_required")) for x in labs_records)
-    full_extraction_review_required = bool(((full_extraction or {}).get("quality") or {}).get("review_required"))
-
-    reasons: list[str] = []
-    if doctor_needs_review:
-        reasons.append("doctor_conclusions")
-    if recommendations_needs_review:
-        reasons.append("recommendations")
-    if labs_review_required:
-        reasons.append("labs")
-    if full_extraction_review_required:
-        reasons.append("full_extraction")
-
-    return {
-        "doctor_needs_review": doctor_needs_review,
-        "recommendations_needs_review": recommendations_needs_review,
-        "labs_review_required": labs_review_required,
-        "full_extraction_review_required": full_extraction_review_required,
-        "any_review_required": bool(reasons),
-        "reasons": reasons,
-    }
-
-
-def quality_state(row: dict[str, Any], has_full: bool, has_expected: bool, review_required: bool) -> str:
-    if row.get("status") == "needs_review" or review_required:
-        return "review"
-    if has_full and has_expected:
-        return "complete"
-    return "incomplete"
-
-
-def esc(s: Any) -> str:
-    return html.escape(str(s) if s is not None else "")
-
-
-def build_file_link(rel_path: str | None) -> dict[str, str] | None:
-    if not rel_path:
-        return None
-    candidate = ROOT / rel_path
-    try:
-        abs_path = candidate.resolve()
-    except Exception:
-        return None
-    return {
-        "href": abs_path.as_uri(),
-        "abs_path": str(abs_path),
-    }
-
-
-def flatten_lab_items(lab_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = []
-    for rec in lab_records:
-        for section in rec.get("sections") or []:
-            if not isinstance(section, dict):
-                continue
-            section_name = str(section.get("name") or "section")
-            for item in section.get("items") or []:
-                if not isinstance(item, dict):
-                    continue
-                out.append(
-                    {
-                        "section": section_name,
-                        "parameter": item.get("parameter"),
-                        "result": item.get("result"),
-                        "reference": item.get("reference"),
-                        "unit": item.get("unit"),
-                    }
-                )
-    return out
-
-
 def build() -> None:
-    registry = load_json(REGISTRY)
-    qcfg = load_json(QUALITY_CFG)
-
-    fe_by_doc: dict[str, dict[str, Any]] = {}
-    for p in REPORTS_DIR.glob("full_extraction_*.json"):
-        try:
-            j = load_json(p)
-        except Exception:
-            continue
-        doc_id = str(j.get("doc_id") or "").strip()
-        if doc_id:
-            j["_path"] = str(p).replace("\\", "/")
-            fe_by_doc[doc_id] = j
-
-    doctor_by_doc: dict[str, list[dict[str, Any]]] = {}
-    for j in read_json_files(ROOT / "data/canonical/doctor_conclusions"):
-        doc_id = str((j.get("source") or {}).get("document_id") or j.get("doc_id") or "").strip()
-        if doc_id:
-            doctor_by_doc.setdefault(doc_id, []).append(j)
-
-    rec_by_doc: dict[str, list[dict[str, Any]]] = {}
-    for j in read_json_files(ROOT / "data/canonical/recommendations"):
-        doc_id = str((j.get("source") or {}).get("document_id") or j.get("doc_id") or "").strip()
-        if doc_id:
-            rec_by_doc.setdefault(doc_id, []).append(j)
-
-    labs_by_doc: dict[str, list[dict[str, Any]]] = {}
-    for j in read_json_files(ROOT / "data/canonical/labs"):
-        doc_id = str(j.get("doc_id") or (j.get("source") or {}).get("document_id") or "").strip()
-        if doc_id:
-            labs_by_doc.setdefault(doc_id, []).append(j)
-
-    rows: list[dict[str, Any]] = []
-    for idx, row in enumerate(registry, start=1):
-        doc_id = str(row.get("id") or "")
-        doc_type = str(row.get("doc_type") or "")
-        expected = expected_entities(doc_type, qcfg)
-        labs_records = labs_by_doc.get(doc_id, [])
-        lab_items = flatten_lab_items(labs_records)
-        doctor_records = doctor_by_doc.get(doc_id, [])
-        recommendation_records = rec_by_doc.get(doc_id, [])
-        full_record = fe_by_doc.get(doc_id)
-
-        has_full = doc_id in fe_by_doc
-        has_expected = True
-        for entity in expected:
-            if entity == "doctor_conclusions" and not doctor_records:
-                has_expected = False
-            elif entity == "recommendations" and not recommendation_records:
-                has_expected = False
-            elif entity == "labs" and (not labs_records or len(lab_items) == 0):
-                has_expected = False
-        review_flags = compute_review_flags(
-            doctor_records=doctor_records,
-            recommendation_records=recommendation_records,
-            labs_records=labs_records,
-            full_extraction=full_record,
-        )
-
-        rows.append(
-            {
-                "idx": idx,
-                "doc_id": doc_id,
-                "file_name": row.get("file_name"),
-                "doc_type": doc_type,
-                "event_date_raw": row.get("event_date_raw"),
-                "status": row.get("status"),
-                "parse_mode": row.get("parse_mode"),
-                "text_len": row.get("text_len"),
-                "source_rel": ((row.get("source") or {}).get("relative_path")),
-                "pdf_link": build_file_link(((row.get("source") or {}).get("relative_path"))),
-                "has_full_extraction": has_full,
-                "has_expected_facts": has_expected,
-                "expected_entities": expected,
-                "quality_status": quality_state(row, has_full, has_expected, review_flags["any_review_required"]),
-                "review_required": review_flags["any_review_required"],
-                "review_flags": review_flags,
-                "doctor_conclusions": doctor_records,
-                "recommendations": recommendation_records,
-                "labs": labs_records,
-                "lab_item_count": len(lab_items),
-                "lab_items_preview": lab_items[:40],
-                "full_extraction": full_record,
-                "full_extraction_link": build_file_link((full_record or {}).get("_path") if full_record else None),
-            }
-        )
-
     generated_at = datetime.now(timezone.utc).isoformat()
-    rows_json = json.dumps(rows, ensure_ascii=False)
-    doc_types = sorted({str(r.get("doc_type") or "") for r in rows})
-    data_payload = {
-        "generated_at": generated_at,
-        "source_registry": str(REGISTRY).replace("\\", "/"),
-        "total": len(rows),
-        "rows": rows,
-    }
-    OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
-    OUT_DATA.write_text(json.dumps(data_payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    options = "".join(f'<option value="{esc(t)}">{esc(t)}</option>' for t in doc_types)
-    html_out = f"""<!doctype html>
+    # Kept for backward compatibility with tooling expecting this artifact.
+    OUT_DATA.parent.mkdir(parents=True, exist_ok=True)
+    OUT_DATA.write_text(
+        json.dumps(
+            {
+                "generated_at": generated_at,
+                "mode": "api_driven",
+                "source": "http://127.0.0.1:8000/v1/review/documents",
+                "rows": [],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    html_out = """<!doctype html>
 <html lang="ru">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Documents Review UI</title>
+<title>Sympsense 2.0</title>
 <style>
-body{{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f7f8fb;color:#111827}}
-.wrap{{padding:22px;max-width:1800px;margin:0 auto}}
-.h1{{font-size:46px;font-weight:800;margin:0 0 4px}}
-.muted{{color:#6b7280}}
-.layout{{display:grid;grid-template-columns:56% 44%;gap:16px;margin-top:14px;align-items:start}}
-.panel{{background:#fff;border:1px solid #e5e7eb;border-radius:14px}}
-.detail-panel{{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}}
-.body{{padding:12px}}
-.controls{{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr;gap:8px}}
-input,select{{padding:9px;border:1px solid #d1d5db;border-radius:10px;font-size:14px}}
-table{{width:100%;border-collapse:collapse;font-size:13px}}
-th,td{{border-bottom:1px solid #f0f1f3;padding:8px;text-align:left;vertical-align:top}}
-tr:hover{{background:#f8fafc;cursor:pointer}}
-.badge{{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}}
-.complete{{background:#ecfdf5;color:#166534;border-color:#86efac}}
-.incomplete{{background:#fffbeb;color:#92400e;border-color:#fde68a}}
-.review{{background:#fef2f2;color:#991b1b;border-color:#fca5a5}}
-.k{{font-size:12px;color:#6b7280}}
-.v{{font-size:14px;white-space:pre-wrap;word-break:break-word}}
-.sec{{border-top:1px dashed #e5e7eb;padding-top:10px;margin-top:10px}}
-.btn{{display:inline-block;padding:6px 10px;border:1px solid #93c5fd;border-radius:10px;text-decoration:none;color:#1d4ed8;background:#eff6ff}}
-.btn-danger{{padding:6px 10px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}}
-.btn-danger-sm{{padding:4px 8px;font-size:12px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}}
-.notice{{margin-top:8px;padding:8px 10px;border-radius:10px;font-size:13px;display:none}}
-.notice.ok{{display:block;background:#ecfdf5;border:1px solid #86efac;color:#166534}}
-.notice.err{{display:block;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}}
-.btn-danger-sm:disabled,.btn-danger:disabled{{opacity:.45;cursor:not-allowed}}
-@media (max-width: 1180px){{
-  .layout{{grid-template-columns:1fr}}
-  .detail-panel{{position:static;max-height:none;overflow:visible}}
-}}
+body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f7f8fb;color:#111827}
+.wrap{padding:22px;max-width:1800px;margin:0 auto}
+.h1{font-size:42px;font-weight:800;margin:0 0 4px}
+.muted{color:#6b7280}
+.panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;min-width:0}
+.body{padding:12px}
+.notice{margin-top:8px;padding:8px 10px;border-radius:10px;font-size:13px;display:none}
+.notice.ok{display:block;background:#ecfdf5;border:1px solid #86efac;color:#166534}
+.notice.err{display:block;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}
+.quality-chip{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
+.quality-pass{background:#ecfdf5;color:#166534;border-color:#86efac}
+.quality-fail{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
+.quality-unknown{background:#f3f4f6;color:#374151;border-color:#d1d5db}
+.tabbar{display:flex;gap:8px;margin-top:14px}
+.tab-btn{padding:8px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff;color:#111827;cursor:pointer;font-size:14px}
+.tab-btn.active{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+.switch{display:inline-flex;align-items:center;gap:8px;color:#374151;font-size:14px}
+.view{display:none;margin-top:12px}
+.view.active{display:block}
+.docs-layout{display:grid;grid-template-columns:minmax(0,58%) minmax(0,42%);gap:16px;align-items:start}
+.detail-panel{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.controls{display:grid;grid-template-columns:1.8fr 1fr 1.2fr;gap:8px}
+input,select{padding:9px;border:1px solid #d1d5db;border-radius:10px;font-size:14px;width:100%;box-sizing:border-box}
+select{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.controls>*{min-width:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border-bottom:1px solid #f0f1f3;padding:8px;text-align:left;vertical-align:top}
+tbody#rows tr:hover{background:#f8fafc;cursor:pointer}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
+.complete{background:#ecfdf5;color:#166534;border-color:#86efac}
+.incomplete{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.review{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
+.type-chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
+.type-labs{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+.type-consult{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+.type-imaging{background:#fff7ed;color:#9a3412;border-color:#fdba74}
+.type-other{background:#f3f4f6;color:#374151;border-color:#d1d5db}
+.k{font-size:12px;color:#6b7280}
+.v{font-size:14px;white-space:pre-wrap;word-break:break-word}
+.sec{border-top:1px dashed #e5e7eb;padding-top:10px;margin-top:10px}
+.btn{display:inline-block;padding:6px 10px;border:1px solid #93c5fd;border-radius:10px;text-decoration:none;color:#1d4ed8;background:#eff6ff}
+.btn-danger{padding:6px 10px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}
+.btn-danger-sm{padding:4px 8px;font-size:12px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}
+.btn-danger-sm:disabled,.btn-danger:disabled{opacity:.45;cursor:not-allowed}
+.card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.card{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fafafa}
+.card .num{font-size:20px;font-weight:700}
+.lab-table{width:100%;table-layout:fixed}
+.lab-table th{font-size:12px;color:#6b7280;background:#f9fafb}
+.lab-table td{font-size:13px}
+.lab-table th,.lab-table td{word-break:break-word}
+.analytics-list{margin-top:8px}
+.analytics-row{padding:5px 0;border-bottom:1px dotted #eceff3}
+.analytics-row:last-child{border-bottom:none}
+.queue-item{border:1px solid #e5e7eb;border-radius:10px;padding:8px;margin:8px 0;background:#fff}
+.queue-item .meta{font-size:12px;color:#6b7280;margin-bottom:4px}
+.queue-item .txt{font-size:13px;line-height:1.35}
+.link-btn{font-size:12px;padding:2px 6px;border:1px solid #93c5fd;border-radius:8px;background:#eff6ff;color:#1d4ed8;cursor:pointer}
+.queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
+.lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.lab-trend-up{color:#b91c1c;font-weight:600}
+.lab-trend-down{color:#0369a1;font-weight:600}
+.lab-trend-flat{color:#374151;font-weight:600}
+.lab-value-ok{color:#15803d;font-weight:600}
+.lab-value-alert{color:#b91c1c;font-weight:600}
+details.sec summary{cursor:pointer;user-select:none}
+details.sec[open] summary{margin-bottom:6px}
+.briefing-kpi-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:10px}
+.briefing-kpi{border:1px solid #e5e7eb;border-radius:10px;padding:10px;background:#fafafa}
+.briefing-kpi .label{font-size:12px;color:#6b7280}
+.briefing-kpi .num{font-size:24px;font-weight:800;line-height:1.15;margin-top:2px}
+.briefing-kpi .hint{font-size:12px;color:#6b7280;margin-top:3px}
+.briefing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
+.briefing-section{border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#fff}
+.briefing-section h3{margin:0;font-size:16px}
+.briefing-sub{margin-top:4px;color:#6b7280;font-size:13px}
+.briefing-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.briefing-item{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fcfcfd}
+.briefing-item .head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.briefing-item .title{font-weight:600}
+.briefing-item .meta{font-size:12px;color:#6b7280;margin-top:3px}
+.briefing-item .txt{font-size:13px;line-height:1.4;margin-top:5px}
+.briefing-bullets{margin:8px 0 0 0;padding-left:18px}
+.briefing-bullets li{margin:4px 0}
+.prio-chip{display:inline-flex;align-items:center;border-radius:999px;font-size:11px;padding:2px 8px;border:1px solid}
+.prio-high{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
+.prio-medium{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.prio-low{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+.briefing-checklist{margin:8px 0 0 0;padding-left:18px}
+.briefing-checklist li{margin:6px 0}
+@media (max-width: 1180px){
+  .docs-layout{grid-template-columns:1fr}
+  .detail-panel{position:static;max-height:none;overflow:visible}
+  .card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .queue-controls{grid-template-columns:1fr 1fr}
+  .lab-summary-controls{grid-template-columns:1fr 1fr}
+  .controls{grid-template-columns:1fr 1fr}
+  .briefing-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .briefing-grid{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="h1">Documents Review UI</div>
-  <div class="muted">Generated at {esc(generated_at)}</div>
+  <div class="h1">Sympsense 2.0</div>
+  <div class="muted" id="qualityLine" style="margin-top:4px"></div>
   <div id="notice" class="notice"></div>
-  <div class="layout">
-    <div class="panel">
-      <div class="body">
-        <div class="controls">
-          <input id="q" placeholder="Search file/doc_id/path"/>
-          <select id="typeFilter"><option value="">All doc types</option>{options}</select>
-          <select id="stateFilter">
-            <option value="">All quality states</option>
-            <option value="complete">complete</option>
-            <option value="incomplete">incomplete</option>
-            <option value="review">review</option>
-          </select>
-          <select id="reviewFilter">
-            <option value="">All review flags</option>
-            <option value="needs_review">needs_review</option>
-            <option value="ok">ok</option>
-          </select>
-          <select id="sortBy">
-            <option value="idx">Original order</option>
-            <option value="event_date_raw">Date</option>
-            <option value="doc_type">Doc type</option>
-            <option value="text_len">Text len</option>
-          </select>
-        </div>
-        <div id="stats" class="muted" style="margin:10px 0"></div>
-        <table>
-          <thead><tr><th>#</th><th>File</th><th>Type</th><th>Date</th><th>Parse</th><th>Text</th><th>Quality</th><th>Review</th><th>Action</th></tr></thead>
-          <tbody id="rows"></tbody>
-        </table>
-      </div>
+
+  <div class="toolbar">
+    <div class="tabbar">
+      <button class="tab-btn active" data-view="briefing">Сводка</button>
+      <button class="tab-btn" data-view="labs">Анализы (динамика)</button>
+      <button class="tab-btn" data-view="docs">Документы</button>
+      <button class="tab-btn" data-view="review" data-advanced="true">Проверка фактов</button>
+      <button class="tab-btn" data-view="analytics" data-advanced="true">Граф связей</button>
     </div>
-    <div class="panel detail-panel"><div class="body" id="detail">Выбери документ слева.</div></div>
+    <label class="switch">
+      <input id="advancedModeToggle" type="checkbox"/>
+      Экспертный режим
+    </label>
+  </div>
+
+  <div id="view-docs" class="view">
+    <div class="docs-layout">
+      <div class="panel">
+        <div class="body">
+          <div class="controls">
+            <input id="q" placeholder="Поиск по названию, содержимому, doc_id"/>
+            <select id="typeFilter"><option value="">Все типы документов</option></select>
+            <label class="switch" style="padding:0 8px;border:1px solid #d1d5db;border-radius:10px;background:#fff">
+              <input id="problemOnlyToggle" type="checkbox"/>
+              Только проблемные
+            </label>
+          </div>
+          <div id="stats" class="muted" style="margin:10px 0"></div>
+          <table>
+            <thead><tr><th>#</th><th>Файл</th><th>Тип</th><th>Дата</th><th>Качество</th><th>Действие</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel detail-panel"><div class="body" id="detail">Выберите документ в таблице слева.</div></div>
+    </div>
+  </div>
+
+  <div id="view-labs" class="view">
+    <div class="panel"><div class="body">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="font-weight:700">Свод анализов по динамике</div>
+        <button id="labSummaryRefreshBtn" class="link-btn">Обновить</button>
+      </div>
+      <div class="muted" style="margin:6px 0 10px 0">По каждому показателю показаны значения по годам. Пусто — в этом году показатель не сдавался.</div>
+      <div class="lab-summary-controls">
+        <input id="labSummarySearch" placeholder="Поиск по показателю"/>
+        <select id="labSummaryFlagFilter">
+          <option value="">Все показатели</option>
+          <option value="abnormal">Есть отклонения</option>
+          <option value="normal">Без отклонений</option>
+        </select>
+        <div id="labSummaryStats" class="muted"></div>
+      </div>
+      <div id="labSummaryPanel" class="muted">Загрузка...</div>
+    </div></div>
+  </div>
+  <div id="view-review" class="view" data-advanced="true">
+    <div class="panel"><div class="body">
+      <div style="font-weight:700;margin-bottom:8px">Очередь проверки фактов</div>
+      <div class="muted" style="margin-bottom:8px">Здесь обрабатываются только спорные элементы базы.</div>
+      <div class="queue-controls">
+        <select id="factCollectionFilter">
+          <option value="">Все коллекции</option>
+          <option value="condition_mentions">condition_mentions</option>
+          <option value="clinical_findings">clinical_findings</option>
+          <option value="condition_investigation_links">condition_investigation_links</option>
+          <option value="lab_results">lab_results</option>
+          <option value="recommendation_items">recommendation_items</option>
+          <option value="medication_items">medication_items</option>
+        </select>
+        <select id="factStateFilter">
+          <option value="open">open (только открытые)</option>
+          <option value="all">all (все)</option>
+          <option value="resolved">resolved (подтвержденные)</option>
+          <option value="skipped">skipped (пропущенные)</option>
+        </select>
+        <select id="factLimitFilter">
+          <option value="12">12</option>
+          <option value="30">30</option>
+          <option value="60">60</option>
+        </select>
+        <button id="factQueueRefreshBtn" class="link-btn">Обновить</button>
+      </div>
+      <div id="factQueue" class="muted">Загрузка...</div>
+    </div></div>
+  </div>
+
+  <div id="view-analytics" class="view" data-advanced="true">
+    <div class="panel"><div class="body">
+      <div style="font-weight:700;margin-bottom:8px">Снимок графа связей</div>
+      <div id="analyticsSnapshot" class="muted">Загрузка...</div>
+      <div class="sec">
+        <div class="k">Детализация по кластеру</div>
+        <select id="analyticsClusterSelect" style="margin-top:6px">
+          <option value="">Выберите кластер состояния...</option>
+        </select>
+        <div id="analyticsDrilldown" class="analytics-list muted">Выберите кластер</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div id="view-briefing" class="view active">
+    <div class="panel"><div class="body">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <div style="font-weight:700">Краткая медицинская сводка</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="briefingRefreshBtn" class="link-btn">Обновить</button>
+          <button id="briefingBuildBtn" class="link-btn">Пересчитать</button>
+        </div>
+      </div>
+      <div class="muted" style="margin-top:6px">Ключевые состояния и динамика по собранным документам.</div>
+      <div id="briefingPanel" class="muted" style="margin-top:10px">Загрузка...</div>
+    </div></div>
   </div>
 </div>
 <script>
-let rows = {rows_json};
-const q=document.getElementById('q'), tF=document.getElementById('typeFilter'), sF=document.getElementById('stateFilter'), rF=document.getElementById('reviewFilter'), sB=document.getElementById('sortBy');
+let rows = [];
+let selectedDocId = '';
+let deleteApiReady = false;
+let analyticsGraphCache = { nodes: [], edges: [] };
+let activeView = 'briefing';
+let advancedModeEnabled = false;
+let latestQualityPayload = null;
+let labSummaryRows = [];
+let labSummaryYears = [];
+
+const FALLBACK_API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = location.protocol === 'file:' ? FALLBACK_API_BASE : window.location.origin;
+
+const q=document.getElementById('q'), tF=document.getElementById('typeFilter');
 const tbody=document.getElementById('rows'), detail=document.getElementById('detail'), stats=document.getElementById('stats');
+const problemOnlyToggleEl=document.getElementById('problemOnlyToggle');
 const notice=document.getElementById('notice');
-const API_BASE=location.protocol==='file:'?'http://127.0.0.1:8765':'';
-let apiReady=false;
-function e(s){{ return (s??'').toString().replace(/[&<>\"']/g,m=>({{'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}}[m])); }}
-function line(v){{ return e(v).replace(/\\n/g,'<br/>'); }}
-function apiUrl(path){{ return `${{API_BASE}}${{path}}`; }}
-function assetHref(relPath, fallbackHref){{
-  if(!relPath) return fallbackHref||'';
-  if(location.protocol==='file:') return fallbackHref||'';
-  return apiUrl('/api/file?rel=' + encodeURIComponent(relPath));
-}}
-function setNotice(msg, isError){{
-  notice.className = isError ? 'notice err' : 'notice ok';
-  notice.textContent = msg;
-}}
-async function probeApi(){{
-  try {{
-    const res = await fetch(apiUrl('/api/health'), {{ method:'GET' }});
-    if(!res.ok) throw new Error(`HTTP ${{res.status}}`);
-    apiReady = true;
-    setNotice('Delete API: available.', false);
-  }} catch(err) {{
-    apiReady = false;
-    if(location.protocol==='file:'){{
-      setNotice('Delete недоступен: запусти локальный API сервер и открой http://127.0.0.1:8765/ui', true);
-    }} else {{
-      setNotice(`Delete API недоступен: ${{err.message}}`, true);
-    }}
-  }}
-  filt();
-}}
-async function deleteDoc(docId){{
-  if(!apiReady){{
-    setNotice('Delete недоступен: API сервер не отвечает.', true);
+const qualityLineEl=document.getElementById('qualityLine');
+const analyticsSnapshotEl=document.getElementById('analyticsSnapshot');
+const analyticsClusterSelectEl=document.getElementById('analyticsClusterSelect');
+const analyticsDrilldownEl=document.getElementById('analyticsDrilldown');
+const factQueueEl=document.getElementById('factQueue');
+const factCollectionFilterEl=document.getElementById('factCollectionFilter');
+const factStateFilterEl=document.getElementById('factStateFilter');
+const factLimitFilterEl=document.getElementById('factLimitFilter');
+const factQueueRefreshBtn=document.getElementById('factQueueRefreshBtn');
+const briefingPanelEl=document.getElementById('briefingPanel');
+const briefingRefreshBtn=document.getElementById('briefingRefreshBtn');
+const briefingBuildBtn=document.getElementById('briefingBuildBtn');
+const advancedModeToggleEl=document.getElementById('advancedModeToggle');
+const labSummaryPanelEl=document.getElementById('labSummaryPanel');
+const labSummaryStatsEl=document.getElementById('labSummaryStats');
+const labSummarySearchEl=document.getElementById('labSummarySearch');
+const labSummaryFlagFilterEl=document.getElementById('labSummaryFlagFilter');
+const labSummaryRefreshBtn=document.getElementById('labSummaryRefreshBtn');
+
+function e(s){
+  return (s??'').toString()
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;')
+    .replace(/'/g,'&#39;');
+}
+function line(v){ return e(v).replace(/\\n/g,'<br/>'); }
+function readApiUrl(path){ return `${API_BASE}${path}`; }
+function deleteApiUrl(path){ return `${API_BASE}${path}`; }
+function parseNum(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+function setNotice(msg, isError){ notice.className = isError ? 'notice err' : 'notice ok'; notice.textContent = msg; }
+function toDateObject(isoDate){
+  const s = (isoDate || '').toString().trim();
+  if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return null;
+  const dt = new Date(`${s}T00:00:00Z`);
+  return Number.isFinite(dt.getTime()) ? dt : null;
+}
+function daysBetweenInclusive(startDate, endDate){
+  const a = toDateObject(startDate);
+  const b = toDateObject(endDate);
+  if(!a || !b) return 0;
+  const diff = Math.round((b.getTime() - a.getTime()) / 86400000);
+  return Math.max(0, diff) + 1;
+}
+function trendClassAndLabel(trend){
+  if(trend === 'up') return { cls: 'lab-trend-up', label: 'рост' };
+  if(trend === 'down') return { cls: 'lab-trend-down', label: 'снижение' };
+  return { cls: 'lab-trend-flat', label: trend === 'flat' ? 'без явного тренда' : 'недостаточно данных' };
+}
+
+function setActiveView(view){
+  activeView = view;
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el=>el.classList.remove('active'));
+  const section = document.getElementById(`view-${view}`);
+  if(section) section.classList.add('active');
+  const btn = document.querySelector(`.tab-btn[data-view="${view}"]`);
+  if(btn) btn.classList.add('active');
+}
+
+function setAdvancedMode(enabled){
+  advancedModeEnabled = !!enabled;
+  document.querySelectorAll('[data-advanced="true"]').forEach(el => {
+    el.style.display = advancedModeEnabled ? '' : 'none';
+  });
+  renderQualityLine();
+  if(!advancedModeEnabled && (activeView === 'review' || activeView === 'analytics')){
+    setActiveView('briefing');
+  }
+  if(advancedModeEnabled){
+    loadFactQueue().catch(err => setNotice(`Не удалось загрузить очередь фактов: ${err.message}`, true));
+    loadAnalyticsSnapshot().catch(err => setNotice(`Не удалось загрузить граф связей: ${err.message}`, true));
+  }
+}
+
+function openDoc(docId){
+  setActiveView('docs');
+  show(docId);
+}
+
+function toIsoDateKey(raw){
+  const s=(raw||'').toString().trim();
+  if(!s) return '';
+  if(/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;
+  const m=s.match(/^(\\d{2})\\.(\\d{2})\\.(\\d{4})$/);
+  if(!m) return s;
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+
+function buildTypeOptions(){
+  const types = [...new Set(rows.map(r => (r.doc_type||'').toString()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ru'));
+  tF.innerHTML = '<option value="">Все типы документов</option>' + types.map(t => `<option value="${e(t)}">${e(docTypeLabel(t))}</option>`).join('');
+}
+
+function qualityChip(status){
+  const s=(status||'unknown').toString().toLowerCase();
+  const cls=s==='pass'?'quality-pass':(s==='fail'?'quality-fail':'quality-unknown');
+  return `<span class="quality-chip ${cls}">${e(s)}</span>`;
+}
+
+function qualityLabel(status){
+  const s=(status||'').toString().toLowerCase();
+  if(s==='complete') return 'готово';
+  if(s==='incomplete') return 'частично';
+  if(s==='review') return 'на проверке';
+  return s || 'неизвестно';
+}
+
+function docFamily(docType){
+  const dt = (docType || '').toString().toLowerCase();
+  if(dt === 'lab_report' || dt.includes('lab')) return 'labs';
+  if(dt === 'doctor_consultation' || dt.includes('consult')) return 'consult';
+  if(dt.startsWith('imaging_report_') || dt.includes('mri') || dt.includes('xray') || dt.includes('ct')) return 'imaging';
+  return 'other';
+}
+
+function docTypeLabel(docType){
+  const dt = (docType || '').toString().toLowerCase();
+  const map = {
+    lab_report: 'Анализы',
+    doctor_consultation: 'Консультация врача',
+    imaging_report_mri: 'Снимок (МРТ)',
+    imaging_report_xray: 'Снимок (Рентген)',
+    imaging_report_ct: 'Снимок (КТ)',
+    imaging_report_ultrasound: 'Снимок (УЗИ)',
+  };
+  if(map[dt]) return map[dt];
+  if(dt.startsWith('imaging_report_')) return 'Снимок';
+  if(!dt) return 'Не указан';
+  return dt.replace(/_/g, ' ');
+}
+
+function docFamilyLabel(family){
+  const map = {
+    labs: 'Анализы',
+    consult: 'Консультации',
+    imaging: 'Снимки',
+    other: 'Прочее',
+  };
+  return map[family] || 'Прочее';
+}
+
+function prettifyFileName(name){
+  const src = (name || '').toString().trim();
+  if(!src) return '';
+  let base = src.replace(/\\.pdf$/i, '');
+  base = base.replace(/[_]+/g, ' ').replace(/\\s+/g, ' ').trim();
+  base = base.replace(/Rezul'?tatyanalizovot/gi, 'Результат анализов от ');
+  base = base.replace(/report-\\d+-\\d+/gi, 'Медицинский отчет');
+  base = base.replace(/\\(\\s*(\\d+)\\s*\\)/g, '#$1');
+  base = base.replace(/\\s{2,}/g, ' ').trim();
+  if(base.length > 95) base = `${base.slice(0, 95)}...`;
+  return base || src;
+}
+
+function isProblematicRow(r){
+  return !!r.review_required || (r.quality_status||'') !== 'complete' || r.has_expected_facts === false || r.has_full_extraction === false;
+}
+
+function renderQualityLine(){
+  if(!qualityLineEl || !latestQualityPayload) return;
+  const payload = latestQualityPayload;
+  const q = payload.reports?.quality_gates_v1;
+  const b = payload.reports?.body_snapshot_quality_gates_v1;
+  const totals = payload.totals || {};
+  if(!advancedModeEnabled){
+    qualityLineEl.innerHTML = `Качество базы: ${qualityChip(payload.overall_status)} | проблемных проверок: <b>${e(totals.failed_gates_count||0)}</b>`;
     return;
-  }}
+  }
+  qualityLineEl.innerHTML = `Качество базы: ${qualityChip(payload.overall_status)} | quality_gates_v1: ${qualityChip(q?.status)} | body_snapshot_quality_gates_v1: ${qualityChip(b?.status)} | проблемных проверок: <b>${e(totals.failed_gates_count||0)}</b> | регрессионных провалов: <b>${e(totals.failed_regression_checks_count||0)}</b>`;
+}
+
+function entityLabel(entity){
+  const map = {
+    doctor_conclusions: 'заключения врача',
+    recommendations: 'рекомендации',
+    labs: 'лабораторные показатели',
+    medications: 'медикаменты',
+    symptoms_events: 'симптомы/события',
+  };
+  return map[entity] || entity || 'сущность';
+}
+
+function extractEvidenceSnippets(rawText, hints, maxItems){
+  const src = (rawText || '').toString().replace(/\\s+/g, ' ').trim();
+  if(!src) return [];
+
+  const MEDICAL_CUES = [
+    'диагноз','заключение','рекомендац','жалоб','объектив','анамнез','исследован','анализ',
+    'невролог','терапевт','мрт','рентген','консультац','лечение','синдром','остеохондроз',
+    'грыжа','протруз','боль','теносиновит','вегетатив'
+  ];
+  const NOISE_CUES = [
+    'акционерное общество','огрн','инн','адрес','г.москва','ул.','д.','стр.',
+    'id пациента','пациент:','медицинская документация','утверждено приказом',
+    'российской федерации','клиника к+31'
+  ];
+
+  function norm(s){
+    return (s || '').toString().replace(/\\s+/g, ' ').trim();
+  }
+  function hasCue(text, cues){
+    const low = text.toLowerCase();
+    return cues.some(c => low.includes(c));
+  }
+  function isMostlyNoise(text){
+    const low = text.toLowerCase();
+    const noiseHits = NOISE_CUES.filter(c => low.includes(c)).length;
+    const medHits = MEDICAL_CUES.filter(c => low.includes(c)).length;
+    return noiseHits >= 2 && medHits === 0;
+  }
+  function getWindow(text, idx, spanLeft=90, spanRight=180){
+    const from = Math.max(0, idx - spanLeft);
+    const to = Math.min(text.length, idx + spanRight);
+    let cut = text.slice(from, to);
+    const leftPunct = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('; '), cut.lastIndexOf(': '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+    if(leftPunct >= 0 && leftPunct < Math.floor(cut.length * 0.6)) cut = cut.slice(leftPunct + 2);
+    const rightCandidates = [cut.indexOf('. '), cut.indexOf('; '), cut.indexOf('! '), cut.indexOf('? ')].filter(x => x >= 40);
+    if(rightCandidates.length){
+      const right = Math.min(...rightCandidates);
+      cut = cut.slice(0, right + 1);
+    }
+    cut = norm(cut);
+    if(from > 0) cut = `... ${cut}`;
+    if(to < text.length) cut = `${cut} ...`;
+    return cut;
+  }
+
+  const out = [];
+  const seen = new Set();
+  const candidates = [];
+  const lowerSrc = src.toLowerCase();
+
+  const hintTokens = [];
+  for(const h of (hints || [])){
+    const t = norm(h).toLowerCase();
+    if(!t) continue;
+    const tokens = t.split(/[^a-zа-яё0-9]+/i)
+      .map(x => x.trim())
+      .filter(x => x.length >= 5 && !NOISE_CUES.some(n => x.includes(n)));
+    hintTokens.push(...tokens.slice(0, 8));
+  }
+
+  for(const token of [...new Set(hintTokens)]){
+    const idx = lowerSrc.indexOf(token);
+    if(idx < 0) continue;
+    const snippet = getWindow(src, idx, 80, 210);
+    if(!snippet || snippet.length < 40) continue;
+    const score = (hasCue(snippet, MEDICAL_CUES) ? 4 : 0) + (isMostlyNoise(snippet) ? -6 : 0);
+    candidates.push({ snippet, score });
+  }
+
+  if(candidates.length < maxItems){
+    const cueRegex = /(диагноз|заключение|рекомендац|жалоб|объектив|исследован|консультац)/gi;
+    let m;
+    while((m = cueRegex.exec(src)) !== null){
+      const snippet = getWindow(src, m.index, 70, 220);
+      if(!snippet || snippet.length < 40) continue;
+      const score = 3 + (hasCue(snippet, MEDICAL_CUES) ? 2 : 0) + (isMostlyNoise(snippet) ? -6 : 0);
+      candidates.push({ snippet, score });
+      if(candidates.length > 24) break;
+    }
+  }
+
+  candidates.sort((a,b) => b.score - a.score || b.snippet.length - a.snippet.length);
+  for(const c of candidates){
+    if(out.length >= maxItems) break;
+    const key = norm(c.snippet.toLowerCase()).slice(0, 180);
+    if(!key || seen.has(key)) continue;
+    if(isMostlyNoise(c.snippet)) continue;
+    seen.add(key);
+    out.push(c.snippet.length > 260 ? `${c.snippet.slice(0, 260)}...` : c.snippet);
+  }
+
+  if(out.length < maxItems){
+    const parts = src
+      .split(/(?:\\.\\s+|;\\s+|\\|\\s+)/)
+      .map(x => norm(x))
+      .filter(x => x.length >= 45 && !isMostlyNoise(x));
+    for(const p of parts){
+      if(out.length >= maxItems) break;
+      const key = p.toLowerCase().slice(0, 180);
+      if(seen.has(key)) continue;
+      const score = hasCue(p, MEDICAL_CUES) ? 2 : 0;
+      if(score <= 0) continue;
+      seen.add(key);
+      out.push(p.length > 260 ? `${p.slice(0, 260)}...` : p);
+    }
+  }
+
+  return out.slice(0, maxItems);
+}
+
+function assetHref(relPath, fallbackHref){
+  if(relPath) return deleteApiUrl('/api/file?rel=' + encodeURIComponent(relPath));
+  return fallbackHref || '';
+}
+
+async function probeDeleteApi(){
+  try {
+    const res = await fetch(deleteApiUrl('/api/health'), { method:'GET' });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    deleteApiReady = true;
+    setNotice('API чтения и удаления доступны.', false);
+  } catch(err) {
+    deleteApiReady = false;
+    setNotice(`API чтения доступен, удаление недоступно: ${err.message}`, true);
+  }
+}
+
+async function loadRows(){
+  const res = await fetch(readApiUrl('/v1/review/documents?limit=5000'));
+  if(!res.ok) throw new Error(`Ошибка API документов: HTTP ${res.status}`);
+  const payload = await res.json();
+  rows = payload.items || [];
+  buildTypeOptions();
+  return payload;
+}
+
+async function loadQualitySummary(){
+  const res = await fetch(readApiUrl('/v1/quality/latest'));
+  if(!res.ok) throw new Error(`Ошибка API качества: HTTP ${res.status}`);
+  latestQualityPayload = await res.json();
+  renderQualityLine();
+}
+
+async function loadAllLabFacts(){
+  const all = [];
+  let offset = 0;
+  const limit = 1000;
+  while(true){
+    const url = readApiUrl(`/v1/facts/lab_results?limit=${limit}&offset=${offset}`);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error(`Ошибка API анализов: HTTP ${res.status}`);
+    const payload = await res.json();
+    const items = payload.items || [];
+    all.push(...items);
+    offset += items.length;
+    if(offset >= Number(payload.total || 0) || items.length === 0) break;
+  }
+  return all;
+}
+
+function buildLabSummaryRows(labFacts){
+  const groups = new Map();
+  const yearsSet = new Set();
+  for(const row of (labFacts || [])){
+    const rawName = (row.analyte_name || '').toString().trim();
+    if(!rawName) continue;
+    const dateRaw = (row.event_date || '').toString().trim();
+    const year = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateRaw) ? dateRaw.slice(0, 4) : '';
+    if(year) yearsSet.add(year);
+    const key = rawName.toLowerCase();
+    if(!groups.has(key)){
+      groups.set(key, { analyte_name: rawName, rows: [] });
+    }
+    groups.get(key).rows.push(row);
+  }
+  const years = [...yearsSet].sort((a,b)=>a.localeCompare(b));
+  const out = [];
+  for(const g of groups.values()){
+    const points = g.rows
+      .map(x => ({
+        date: (x.event_date || '').toString().trim(),
+        value_num: Number.isFinite(Number(x.value_num)) ? Number(x.value_num) : null,
+        value_text: (x.value_text || '').toString(),
+        abnormal: !!x.abnormal_flag,
+        doc_id: (x.doc_id || '').toString(),
+        reference: (x.reference_range_text || '').toString(),
+      }))
+      .filter(x => x.date)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    if(!points.length) continue;
+    const byYear = {};
+    for(const p of points){
+      const y = /^\\d{4}-\\d{2}-\\d{2}$/.test(p.date) ? p.date.slice(0,4) : '';
+      if(!y) continue;
+      const prev = byYear[y];
+      if(!prev || p.date > prev.date){
+        byYear[y] = p;
+      }
+    }
+    const abnormalCount = points.filter(x => x.abnormal).length;
+    const latestPoint = points[points.length - 1];
+    const latestReference = (latestPoint?.reference || '').toString().trim();
+    const latestDocId = (latestPoint?.doc_id || '').toString().trim();
+    out.push({
+      analyte_name: g.analyte_name,
+      abnormal_count: abnormalCount,
+      by_year: byYear,
+      latest_reference: latestReference,
+      latest_doc_id: latestDocId,
+    });
+  }
+  out.sort((a,b) => {
+    const abnormalCmp = Number(b.abnormal_count || 0) - Number(a.abnormal_count || 0);
+    if(abnormalCmp !== 0) return abnormalCmp;
+    return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
+  });
+  return { rows: out, years: years };
+}
+
+function isUninformativeLabValue(v){
+  const s = (v || '').toString().trim().toLowerCase();
+  if(!s) return true;
+  const normalized = s.replace(/\\s+/g, ' ');
+  return normalized.includes('не обнаруж') || normalized.includes('отсутств') || normalized === '—' || normalized === '-';
+}
+
+function cleanReferenceText(ref){
+  let s = (ref || '').toString().trim();
+  if(!s) return '';
+  s = s.replace(/\\s+/g, ' ');
+  // Common OCR splits/joins in references.
+  s = s.replace(/\\bо\\s*трицател[а-яё]*/gi, 'отрицательно');
+  s = s.replace(/\\bотрицател[а-яё]*/gi, 'отрицательно');
+  s = s.replace(/\\bн\\s*орма\\b/gi, 'норма');
+  s = s.replace(/\\b(отрицательно|положительно|не обнаружено|не выявлено|норма)\\s*(мкмоль\\/л|ммоль\\/л|мг\\/дл|мг\\/л|г\\/л|нг\\/мл|пг\\/мл|ед\\/л|мме\\/мл|мме\\/л|%)\\b/gi, '$1 $2');
+  s = s.replace(/^(<=?\\s*\\d+[.,]?\\d*\\s*-\\s*)норма\\s*(мкмоль\\/л|ммоль\\/л|мг\\/дл|мг\\/л|г\\/л|нг\\/мл|пг\\/мл|ед\\/л|мме\\/мл|мме\\/л|%)$/i, '$1норма');
+  s = s.replace(/(\\d)([A-Za-zА-Яа-яЁёµμ%])/g, '$1 $2');
+  s = s.replace(/([А-Яа-яЁё])([A-Za-zА-Яа-яЁёµμ]+\\/[A-Za-zА-Яа-яЁё]+)/g, '$1 $2');
+  s = s.replace(/\\s+/g, ' ').trim();
+  return s;
+}
+
+function usefulnessScore(row, years){
+  const sortedYears = [...(years || [])].sort((a,b)=>a.localeCompare(b));
+  const recentYears = sortedYears.slice(-3);
+  const points = Object.values(row.by_year || {});
+  const recentPresent = recentYears.filter(y => !!(row.by_year || {})[y]).length;
+  const informativeCount = points.filter(p => !isUninformativeLabValue((p || {}).value_text || '')).length;
+  const hasOnlyUninformative = points.length > 0 && informativeCount === 0;
+  let score = 0;
+  score += recentPresent * 30;
+  score += informativeCount * 6;
+  score += Number(row.abnormal_count || 0) * 3;
+  if(recentPresent === 0) score -= 220;
+  if(hasOnlyUninformative) score -= 140;
+  return score;
+}
+
+function detectLabGroup(name){
+  const n = (name || '').toLowerCase();
+  if(!n) return 'Прочее';
+  if(
+    n.includes('ттг') || n.includes('тестостерон') || n.includes('пролактин') || n.includes('фсг') ||
+    n.includes('лютеиниз') || n.includes('дгэа') || n.includes('андроген') || n.includes('гормон')
+  ) return 'Гормоны';
+  if(
+    n.includes('днк ') || n.includes('пцр') || n.includes('papilloma') || n.includes('candida') ||
+    n.includes('mycoplasma') || n.includes('ureaplasma') || n.includes('chlamydia') || n.includes('gonorrhoeae') ||
+    n.includes('treponema') || n.includes('trichomonas') || n.includes('gardnerella') || n.includes('cmv') ||
+    n.includes('герпес')
+  ) return 'ПЦР / инфекции';
+  if(
+    n.includes('лейкоц') || n.includes('эритроц') || n.includes('гемоглоб') || n.includes('тромбоц') ||
+    n.includes('нейтроф') || n.includes('лимфоц') || n.includes('моноц') || n.includes('эозиноф') ||
+    n.includes('базоф') || n.includes('соэ') || n.includes('wbc') || n.includes('rbc') || n.includes('plt') ||
+    n.includes('mcv') || n.includes('mch') || n.includes('mchc') || n.includes('rdw')
+  ) return 'Общий анализ крови';
+  if(
+    n.includes('мочев') || n.includes('креатинин') || n.includes('холестерин') || n.includes('лпнп') ||
+    n.includes('лпвп') || n.includes('триглицерид') || n.includes('глюкоз') || n.includes('билирубин')
+  ) return 'Биохимия';
+  if(
+    n.includes('удельная плотность') || n.includes('белок') || n.includes('кетон') || n.includes('нитрит') ||
+    n.includes('прозрачн') || n.includes('цвет мочи')
+  ) return 'Анализ мочи';
+  return 'Прочее';
+}
+
+function rowIsNonDetectedOrMissing(row){
+  const points = Object.values(row.by_year || {});
+  if(!points.length) return true;
+  return points.every(p => isUninformativeLabValue((p || {}).value_text || ''));
+}
+
+function renderLabSummaryTableMarkup(items){
+  const yearCount = Math.max((labSummaryYears || []).length, 1);
+  const yearWidth = (36 / yearCount).toFixed(3);
+  const yearHeaders = (labSummaryYears || []).map(y => `<th>${e(y)}</th>`).join('');
+  const yearCols = (labSummaryYears || []).map(() => `<col style="width:${yearWidth}%">`).join('');
+  const rowsHtml = items.map(x => {
+    const yearCells = (labSummaryYears || []).map(y => {
+      const point = (x.by_year || {})[y];
+      if(!point) return '<td>—</td>';
+      const cls = point.abnormal ? 'lab-value-alert' : 'lab-value-ok';
+      return `<td><span class="${cls}">${e(point.value_text || '—')}</span></td>`;
+    }).join('');
+    return `
+      <tr>
+        <td>${e(x.analyte_name)}</td>
+        ${yearCells}
+        <td>${e(cleanReferenceText(x.latest_reference || '') || '—')}</td>
+        <td>${x.latest_doc_id ? `<button class="link-btn" onclick="openDoc('${e(x.latest_doc_id)}')">к документу</button>` : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+  return `
+    <table class="lab-table">
+      <colgroup>
+        <col style="width:32%">
+        ${yearCols}
+        <col style="width:22%">
+        <col style="width:10%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Показатель</th>
+          ${yearHeaders}
+          <th>Референс</th>
+          <th>Документ</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  `;
+}
+
+function renderLabSummaryTable(items){
+  if(!labSummaryPanelEl) return;
+  if(!items.length){
+    labSummaryPanelEl.innerHTML = '<div class="muted">Нет показателей под текущие фильтры.</div>';
+    return;
+  }
+
+  const nonDetected = [];
+  const grouped = new Map();
+  for(const row of items){
+    if(rowIsNonDetectedOrMissing(row)){
+      nonDetected.push(row);
+      continue;
+    }
+    const g = detectLabGroup(row.analyte_name);
+    if(!grouped.has(g)) grouped.set(g, []);
+    grouped.get(g).push(row);
+  }
+
+  const order = ['Гормоны','Общий анализ крови','Биохимия','Анализ мочи','ПЦР / инфекции','Прочее'];
+  const parts = [];
+  for(const g of order){
+    const rows = grouped.get(g) || [];
+    if(!rows.length) continue;
+    parts.push(`
+      <details class="sec" open>
+        <summary><b>${e(g)}</b> (${rows.length})</summary>
+        <div style="margin-top:8px">${renderLabSummaryTableMarkup(rows)}</div>
+      </details>
+    `);
+  }
+  parts.push(`
+    <details class="sec">
+      <summary><b>Не обнаружено / без информативной динамики</b> (${nonDetected.length})</summary>
+      <div style="margin-top:8px">${nonDetected.length ? renderLabSummaryTableMarkup(nonDetected) : '<div class="muted">Нет строк в этой группе.</div>'}</div>
+    </details>
+  `);
+  labSummaryPanelEl.innerHTML = parts.join('');
+}
+
+function renderLabSummary(){
+  if(!labSummaryPanelEl || !labSummaryStatsEl) return;
+  const query = (labSummarySearchEl?.value || '').toLowerCase().trim();
+  const flag = (labSummaryFlagFilterEl?.value || '').trim();
+  const filtered = labSummaryRows.filter(x => {
+    if(query && !(x.analyte_name || '').toLowerCase().includes(query)) return false;
+    if(flag === 'abnormal' && Number(x.abnormal_count || 0) <= 0) return false;
+    if(flag === 'normal' && Number(x.abnormal_count || 0) > 0) return false;
+    return true;
+  });
+  filtered.sort((a,b) => {
+    const aAbn = Number(a.abnormal_count || 0) > 0 ? 1 : 0;
+    const bAbn = Number(b.abnormal_count || 0) > 0 ? 1 : 0;
+    if(bAbn !== aAbn) return bAbn - aAbn;
+    const sa = usefulnessScore(a, labSummaryYears);
+    const sb = usefulnessScore(b, labSummaryYears);
+    if(sb !== sa) return sb - sa;
+    const aAbnCount = Number(a.abnormal_count || 0);
+    const bAbnCount = Number(b.abnormal_count || 0);
+    if(bAbnCount !== aAbnCount) return bAbnCount - aAbnCount;
+    return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
+  });
+  const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
+  labSummaryStatsEl.innerHTML = `Показателей: <b>${filtered.length}</b> из <b>${labSummaryRows.length}</b> | с отклонениями: <b>${abnormalSeries}</b>`;
+  renderLabSummaryTable(filtered);
+}
+
+async function loadLabSummary(){
+  if(!labSummaryPanelEl) return;
+  labSummaryPanelEl.innerHTML = 'Загрузка...';
+  const labFacts = await loadAllLabFacts();
+  const built = buildLabSummaryRows(labFacts);
+  labSummaryRows = built.rows || [];
+  labSummaryYears = built.years || [];
+  renderLabSummary();
+}
+
+async function loadAnalyticsSnapshot(){
+  const res = await fetch(readApiUrl('/v1/analytics/body-graph?include_needs_review=false&min_link_confidence=0.62&link_priorities=high,medium&include_document_nodes=true&include_orphans=false'));
+  if(!res.ok) throw new Error(`Ошибка API графа: HTTP ${res.status}`);
+  const payload = await res.json();
+  const counts = payload.counts || {};
+  const graph = payload.graph || { nodes: [], edges: [] };
+  analyticsGraphCache = graph;
+  const clusterNodes = (graph.nodes || []).filter(n => n.node_type === 'condition_cluster').sort((a,b) => Number(b.mention_count||0) - Number(a.mention_count||0));
+  const topClusters = clusterNodes.slice(0,5);
+  analyticsSnapshotEl.innerHTML = `
+    <div class="card-grid">
+      <div class="card"><div class="k">узлов</div><div class="num">${e(counts.nodes_total||0)}</div></div>
+      <div class="card"><div class="k">связей</div><div class="num">${e(counts.edges_total||0)}</div></div>
+      <div class="card"><div class="k">кластеров</div><div class="num">${e(counts.used_condition_clusters_count||0)}</div></div>
+      <div class="card"><div class="k">исследований</div><div class="num">${e(counts.used_investigations_count||0)}</div></div>
+    </div>
+    <div class="sec">
+      <div class="k">Крупнейшие кластеры состояний</div>
+      <div class="v">${topClusters.length ? topClusters.map(c=>`${e(c.label||c.cluster_id)} (${e(c.mention_count||0)})`).join('<br/>') : 'нет'}</div>
+    </div>
+  `;
+  if(analyticsClusterSelectEl){
+    analyticsClusterSelectEl.innerHTML = '<option value="">Выберите кластер состояния...</option>' + clusterNodes.map(c=>`<option value="${e(c.cluster_id || '')}">${e(c.label || c.cluster_id || '')} (${e(c.mention_count || 0)})</option>`).join('');
+    if(clusterNodes.length){
+      analyticsClusterSelectEl.value = clusterNodes[0].cluster_id || '';
+      renderAnalyticsDrilldown(analyticsClusterSelectEl.value);
+    } else if(analyticsDrilldownEl){
+      analyticsDrilldownEl.innerHTML = 'Кластеры не найдены';
+    }
+  }
+}
+
+function briefingLine(items, mapFn){
+  if(!items || !items.length) return 'нет';
+  return items.map(mapFn).join('<br/>');
+}
+
+function renderLabAttentionTable(items){
+  const rows = (items || []).slice(0, 12);
+  if(!rows.length){
+    return '<div class="muted">Значимых отклонений в лабораториях не выявлено.</div>';
+  }
+  return `
+    <table class="lab-table">
+      <thead>
+        <tr>
+          <th>Показатель</th>
+          <th>Эпизодов</th>
+          <th>Последнее</th>
+          <th>Референс</th>
+          <th>Интерпретация</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(x=>{
+          const latest = (x.latest_value || '').toString();
+          const interpretation = latest.includes('↑')
+            ? 'выше референса'
+            : (latest.includes('↓') ? 'ниже референса' : 'без явной метки');
+          return `
+            <tr>
+              <td>${e(x.theme || '')}</td>
+              <td>${e(x.episodes || 0)}</td>
+              <td>${e(latest || '—')}</td>
+              <td>${e(x.latest_reference || '—')}</td>
+              <td>${e(interpretation)}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function daysSinceText(days){
+  const n = Number(days);
+  if(!Number.isFinite(n)) return 'дата не определена';
+  if(n <= 45) return `${n} дн назад`;
+  if(n <= 365) return `${Math.round(n/30)} мес назад`;
+  return `${Math.round(n/365)} г назад`;
+}
+
+function renderBriefingRows(items, renderFn, emptyText){
+  if(!items || !items.length) return `<div class="muted">${e(emptyText || 'нет данных')}</div>`;
+  return items.map(renderFn).join('');
+}
+
+function truncateText(v, maxLen){
+  const src = (v || '').toString().replace(/\\s+/g, ' ').trim();
+  const lim = Number(maxLen) > 0 ? Number(maxLen) : 220;
+  if(!src) return '';
+  if(src.length <= lim) return src;
+  return `${src.slice(0, lim).trim()}...`;
+}
+
+function priorityVisual(priority){
+  const p = (priority || '').toString().toLowerCase();
+  if(p === 'high') return { cls:'prio-high', label:'высокий' };
+  if(p === 'medium') return { cls:'prio-medium', label:'средний' };
+  return { cls:'prio-low', label:'низкий' };
+}
+
+async function loadPatientBriefing(){
+  if(!briefingPanelEl) return;
+  const briefingRes = await fetch(readApiUrl('/v1/reports/patient-briefing/v1'));
+  if(!briefingRes.ok) throw new Error(`Ошибка API сводки: HTTP ${briefingRes.status}`);
+  const payload = await briefingRes.json();
+  const scope = payload.scope || {};
+  const quality = payload.quality || {};
+  const labs = payload.lab_attention_items || [];
+  const findings = payload.clinical_findings || {};
+  const currentState = payload.current_state || {};
+  const csCounters = currentState.counters || {};
+  const active = currentState.active_conditions || [];
+  const longTerm = currentState.long_term_conditions || [];
+  const monitor = currentState.monitoring_items || [];
+  const limits = currentState.functional_limits || [];
+  const history = currentState.history_items || [];
+  const uncertainItems = currentState.uncertain_items || [];
+  const priorities = findings.prioritized_findings || [];
+  const agenda = findings.visit_agenda || payload.suggested_discussion_points || [];
+  const qualityNote = findings.quality_note || '';
+  const highCount = priorities.filter(x => (x.priority||'') === 'high').length;
+  const mediumCount = priorities.filter(x => (x.priority||'') === 'medium').length;
+  const lowCount = priorities.filter(x => (x.priority||'') === 'low').length;
+  const activeCount = Number(csCounters.active_conditions || 0);
+  const monitorCount = Number(csCounters.monitoring_items || 0);
+  const longTermCount = Number(csCounters.long_term_conditions || 0);
+  const labMonitorCount = monitor.filter(x => (x.kind||'') === 'lab_monitor').length;
+  const conditionMonitorCount = monitor.filter(x => (x.kind||'') !== 'lab_monitor').length;
+  const prioritiesCount = priorities.length;
+
+  briefingPanelEl.innerHTML = `
+    <div class="briefing-kpi-grid">
+      <div class="briefing-kpi"><div class="label">документов</div><div class="num">${e(scope.documents_total||0)}</div><div class="hint">в базе</div></div>
+      <div class="briefing-kpi"><div class="label">период</div><div class="num" style="font-size:15px">${e(scope.date_min||'н/д')} -> ${e(scope.date_max||'н/д')}</div><div class="hint">исторический охват</div></div>
+      <div class="briefing-kpi"><div class="label">активные состояния</div><div class="num">${e(activeCount)}</div><div class="hint">текущий фокус</div></div>
+      <div class="briefing-kpi"><div class="label">долгосрочный фон</div><div class="num">${e(longTermCount)}</div><div class="hint">важно помнить</div></div>
+      <div class="briefing-kpi"><div class="label">мониторинг</div><div class="num">${e(monitorCount)}</div><div class="hint">лабы: ${e(labMonitorCount)} | состояния: ${e(conditionMonitorCount)}</div></div>
+    </div>
+
+    <div class="briefing-grid">
+      <div class="briefing-section">
+        <h3>Что важно сейчас</h3>
+        <div class="briefing-sub">Состояния с наиболее свежими подтверждениями.</div>
+        <div class="briefing-list">
+          ${renderBriefingRows(
+            active.slice(0,6),
+            x=>`<div class="briefing-item">
+              <div class="head"><div class="title">${e(x.title||'')}</div></div>
+              <div class="meta">последнее подтверждение: ${e(x.last_seen||'н/д')} (${e(daysSinceText(x.days_since_last))})${(x.icd_codes||[]).length ? ` | МКБ: ${e((x.icd_codes||[]).join(', '))}` : ''}</div>
+              <div class="txt">${e(truncateText(x.why_in_state||'', 180))}</div>
+            </div>`,
+            'Нет активных состояний в текущем окне данных.'
+          )}
+        </div>
+      </div>
+
+      <div class="briefing-section">
+        <h3>Приоритеты к врачу</h3>
+        <div class="briefing-sub">Что имеет смысл обсудить на ближайшем приеме.</div>
+        <div class="briefing-list">
+          ${renderBriefingRows(
+            priorities.slice(0,8),
+            x=>{
+              const pv = priorityVisual(x.priority);
+              return `<div class="briefing-item">
+                <div class="head">
+                  <div class="title">${e(x.title||'')}</div>
+                  <span class="prio-chip ${pv.cls}">${e(pv.label)}</span>
+                </div>
+                <div class="txt">${e(truncateText(x.why_it_matters||'', 160))}</div>
+                <div class="meta">обсудить: ${e(truncateText(x.discussion_prompt||'', 140))}</div>
+              </div>`;
+            },
+            'Приоритетные пункты пока не выделены.'
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div class="briefing-grid">
+      <div class="briefing-section">
+        <h3>Устойчивые состояния</h3>
+        <div class="briefing-sub">Долгосрочный фон, который полезно держать в памяти.</div>
+        <div class="briefing-list">
+          ${renderBriefingRows(
+            longTerm.slice(0,10),
+            x=>`<div class="briefing-item">
+              <div class="title">${e(x.title||'')}</div>
+              <div class="meta">последнее: ${e(x.last_seen||'н/д')} | подтверждения: docs=${e(x.doc_ids_count||0)}, mentions=${e(x.mentions_count||0)}</div>
+            </div>`,
+            'Устойчивые состояния пока не выделены.'
+          )}
+        </div>
+      </div>
+
+      <div class="briefing-section">
+        <h3>Что мониторить</h3>
+        <div class="briefing-sub">Плановый контроль без автоматического признака срочности.</div>
+        <div class="briefing-list">
+          ${renderBriefingRows(
+            monitor.slice(0,10),
+            x=>{
+              const kind = (x.kind||'');
+              if(kind === 'lab_monitor'){
+                const docBtn = x.latest_doc_id ? ` <button class="link-btn" onclick="openDoc('${e(x.latest_doc_id)}')">к документу</button>` : '';
+                return `<div class="briefing-item">
+                  <div class="head"><div class="title">${e(x.title||'')}</div></div>
+                  <div class="meta">лаборатория | последнее: ${e(x.latest_date||'н/д')} (${e(daysSinceText(x.days_since_last))})${docBtn}</div>
+                  <div class="txt">значение: ${e(x.latest_value||'н/д')} | референс: ${e(x.latest_reference||'н/д')}</div>
+                </div>`;
+              }
+              return `<div class="briefing-item">
+                <div class="title">${e(x.title||'')}</div>
+                <div class="meta">состояние | последнее: ${e(x.last_seen||'н/д')} (${e(daysSinceText(x.days_since_last))})</div>
+                <div class="txt">${e(truncateText(x.monitoring_reason||'', 140))}</div>
+              </div>`;
+            },
+            'На текущем срезе отдельные пункты мониторинга не выделены.'
+          )}
+        </div>
+      </div>
+    </div>
+
+    <div class="briefing-section" style="margin-top:10px">
+      <h3>Лабораторные сигналы</h3>
+      <div class="briefing-sub">Ключевые отклонения и последние значения.</div>
+      <div style="margin-top:8px">${renderLabAttentionTable(labs)}</div>
+    </div>
+
+    <div class="briefing-grid">
+      <div class="briefing-section">
+        <h3>Ограничения и осторожность</h3>
+        <div class="briefing-sub">Практические ограничения нагрузки и режима.</div>
+        ${limits.length
+          ? `<ul class="briefing-bullets">${limits.slice(0,10).map(x=>`<li>${e(x)}</li>`).join('')}</ul>`
+          : `<div class="muted" style="margin-top:8px">Специальных ограничений не выделено.</div>`
+        }
+      </div>
+      <div class="briefing-section">
+        <h3>Повестка на следующий визит</h3>
+        <div class="briefing-sub">Список вопросов, который удобно взять к врачу.</div>
+        ${agenda.length
+          ? `<ol class="briefing-checklist">${agenda.slice(0,8).map(x=>`<li>${e(x)}</li>`).join('')}</ol>`
+          : `<div class="muted" style="margin-top:8px">Повестка пока не заполнена.</div>`
+        }
+      </div>
+    </div>
+
+    <details class="sec">
+      <summary><b>История значимых эпизодов</b> (${e(history.length)})</summary>
+      <div style="margin-top:8px" class="briefing-list">
+        ${renderBriefingRows(
+          history.slice(0,14),
+          x=>`<div class="briefing-item"><div class="title">${e(x.title||'')}</div><div class="meta">период: ${e(x.first_seen||'н/д')} -> ${e(x.last_seen||'н/д')}</div></div>`,
+          'Исторические эпизоды не выделены.'
+        )}
+      </div>
+    </details>
+    <details class="sec">
+      <summary><b>Требуют уточнения</b> (${e(uncertainItems.length)})</summary>
+      <div style="margin-top:8px" class="briefing-list">
+        ${renderBriefingRows(
+          uncertainItems.slice(0,10),
+          x=>`<div class="briefing-item"><div class="title">${e(x.title||'')}</div><div class="meta">статус: требует уточнения</div><div class="txt">${e(truncateText(x.why_in_state||'', 180))}</div></div>`,
+          'Неопределенных формулировок нет.'
+        )}
+      </div>
+    </details>
+    ${qualityNote ? `<div class="sec"><div class="k">Комментарий по качеству данных</div><div class="v">${e(qualityNote)}</div></div>` : ''}
+    <div class="sec"><div class="k">Сводное качество</div><div class="v">${qualityChip(quality.overall_status||'unknown')} | высокий приоритет: ${e(highCount)} | средний: ${e(mediumCount)} | низкий: ${e(lowCount)} | всего приоритетов: ${e(prioritiesCount)}</div></div>
+  `;
+}
+
+async function rebuildPatientBriefing(){
+  if(!briefingBuildBtn) return;
+  briefingBuildBtn.disabled = true;
+  try {
+    const [briefingRes, problemRes] = await Promise.all([
+      fetch(readApiUrl('/v1/reports/patient-briefing/v1/build'), { method:'POST' }),
+      fetch(readApiUrl('/v1/facts/problem-list/v1/build'), { method:'POST' }),
+    ]);
+    const briefingPayload = await briefingRes.json().catch(()=>({}));
+    const problemPayload = await problemRes.json().catch(()=>({}));
+    if(!briefingRes.ok) throw new Error(briefingPayload.detail || briefingPayload.error || `HTTP ${briefingRes.status}`);
+    if(!problemRes.ok) throw new Error(problemPayload.detail || problemPayload.error || `HTTP ${problemRes.status}`);
+    setNotice('Сводка и список состояний успешно пересчитаны.', false);
+    await loadPatientBriefing();
+  } catch(err){
+    setNotice(`Не удалось пересчитать сводку: ${err.message}`, true);
+  } finally {
+    briefingBuildBtn.disabled = false;
+  }
+}
+
+function renderAnalyticsDrilldown(clusterId){
+  if(!analyticsDrilldownEl) return;
+  const cid = (clusterId || '').toString().trim();
+  if(!cid){ analyticsDrilldownEl.innerHTML = 'Выберите кластер'; return; }
+  const nodes = analyticsGraphCache?.nodes || [];
+  const edges = analyticsGraphCache?.edges || [];
+  const clusterNodeId = `condition_cluster:${cid}`;
+  const cluster = nodes.find(n => n.id === clusterNodeId);
+  if(!cluster){ analyticsDrilldownEl.innerHTML = 'Кластер не найден в графе'; return; }
+
+  const invNodeById = Object.fromEntries(nodes.filter(n => n.node_type === 'investigation').map(n => [n.id, n]));
+  const docNodeById = Object.fromEntries(nodes.filter(n => n.node_type === 'document').map(n => [n.id, n]));
+  const clusterToInv = edges.filter(x => x.edge_type === 'condition_cluster_to_investigation' && x.source === clusterNodeId);
+  const clusterToDocs = edges.filter(x => x.edge_type === 'condition_cluster_in_document' && x.source === clusterNodeId);
+
+  const investigations = [...new Map(clusterToInv.map(x => [x.target, invNodeById[x.target]]).filter(([,n]) => !!n)).values()];
+  const documents = [...new Map(clusterToDocs.map(x => [x.target, docNodeById[x.target]]).filter(([,n]) => !!n)).values()];
+
+  analyticsDrilldownEl.innerHTML = `
+    <div class="analytics-row"><b>${e(cluster.label || cid)}</b></div>
+    <div class="analytics-row">cluster_id: ${e(cid)} | упоминаний: ${e(cluster.mention_count||0)} | документов: ${e(cluster.doc_count||0)} | МКБ: ${e((cluster.icd_codes||[]).join(', ') || 'нет')}</div>
+    <div class="analytics-row">Связанных исследований: <b>${e(investigations.length)}</b></div>
+    <div class="analytics-row">${investigations.length ? investigations.slice(0,5).map(i=>`${e(i.label || i.event_id)} (${e(i.event_date||'')})`).join('<br/>') : 'нет'}</div>
+    <div class="analytics-row">Связанных документов: <b>${e(documents.length)}</b></div>
+    <div class="analytics-row">${documents.length ? documents.slice(0,7).map(d=>`${e(d.label || d.doc_id)} ${d.doc_id ? `<button class="link-btn" onclick="openDoc('${e(d.doc_id)}')">к документу</button>` : ''}`).join('<br/>') : 'нет'}</div>
+  `;
+}
+
+async function loadFactQueue(){
+  const state = (factStateFilterEl?.value || 'open').toLowerCase();
+  const collection = (factCollectionFilterEl?.value || '').trim();
+  const limit = (factLimitFilterEl?.value || '12').trim();
+  const includeResolved = state !== 'open';
+  const includeMedications = collection === 'medication_items';
+  const qs = new URLSearchParams({
+    limit: limit,
+    include_ok: 'false',
+    include_resolved: includeResolved ? 'true' : 'false',
+    include_medications: includeMedications ? 'true' : 'false',
+    review_state: state,
+  });
+  if(collection) qs.set('collections', collection);
+  const res = await fetch(readApiUrl('/v1/review/fact-queue?' + qs.toString()));
+  if(!res.ok) throw new Error(`Ошибка API очереди фактов: HTTP ${res.status}`);
+  const payload = await res.json();
+  const items = payload.items || [];
+  const counts = payload.counts_by_collection || {};
+  const states = payload.counts_by_review_state || {};
+  factQueueEl.innerHTML = `
+    <div class="k">Элементов в очереди: <b>${e(payload.total||0)}</b></div>
+    <div class="k">По статусам: ${e(Object.entries(states).map(([k,v])=>`${k}:${v}`).join(' | ') || 'нет')}</div>
+    <div class="k">По коллекциям: ${e(Object.entries(counts).map(([k,v])=>`${k}:${v}`).join(' | ') || 'нет')}</div>
+    ${items.map(it => `
+      <div class="queue-item">
+        <div class="meta">
+          ${e(it.fact_collection)} | score=${e(it.priority_score)} | conf=${e(it.confidence)} | state=${e(it.review_state||'open')} | doc=${e(it.doc_id||'')}
+          ${it.doc_id ? `<button class="link-btn" onclick="openDoc('${it.doc_id}')">к документу</button>` : ''}
+          ${it.review_state==='open'
+            ? `<button class="link-btn" onclick="applyFactDecision('${e(it.queue_id)}','resolved')">подтвердить</button>
+               <button class="link-btn" onclick="applyFactDecision('${e(it.queue_id)}','skipped')">пропустить</button>`
+            : `<button class="link-btn" onclick="applyFactDecision('${e(it.queue_id)}','reopened')">вернуть</button>`
+          }
+        </div>
+        <div class="txt">${line(it.preview||'')}</div>
+        <div class="k">Причины: ${e((it.reasons||[]).join(', ') || 'нет')}</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+async function applyFactDecision(queueId, action){
+  try {
+    const res = await fetch(readApiUrl('/v1/review/fact-queue/decision'), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ queue_id: queueId, action: action, actor: 'ui' })
+    });
+    const payload = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(payload.detail || payload.error || `HTTP ${res.status}`);
+    setNotice(`Решение сохранено: ${queueId} -> ${action}`, false);
+    await loadFactQueue();
+  } catch(err){
+    setNotice(`Не удалось сохранить решение: ${err.message}`, true);
+  }
+}
+
+async function loadAndRenderDetail(docId){
+  const res = await fetch(readApiUrl('/v1/review/documents/' + encodeURIComponent(docId)));
+  if(!res.ok) throw new Error(`Ошибка API деталей: HTTP ${res.status}`);
+  const r = await res.json();
+  const dc=(r.doctor_conclusions||[]), rec=(r.recommendations||[]), labs=(r.labs||[]), labItems=(r.lab_items_preview||[]);
+  const rf=(r.review_flags||{});
+  const fe=r.full_extraction||null;
+  const prettyFileName = prettifyFileName(r.file_name || '');
+  const showOriginalName = prettyFileName && prettyFileName !== (r.file_name || '');
+  const typeHuman = docTypeLabel(r.doc_type || '');
+  const conclusionLabel=(r.doc_type||'').startsWith('imaging_report_') ? 'Заключения по исследованию' : 'Заключения врача';
+  const pdfLink=assetHref(r.source_rel, r.pdf_link?.href||'');
+  const feLink=assetHref(r.full_extraction_rel||'', r.full_extraction_link?.href||'');
+  const expectedEntities = Array.isArray(r.expected_entities) ? r.expected_entities : [];
+  const expectedHuman = expectedEntities.map(entityLabel);
+  const expectedCoverage = expectedEntities.map(name => {
+    let found = false;
+    if(name === 'doctor_conclusions') found = dc.length > 0;
+    else if(name === 'recommendations') found = rec.length > 0;
+    else if(name === 'labs') found = (labItems.length > 0) || (labs.length > 0);
+    else found = false;
+    return { name, found };
+  });
+  const foundExpected = expectedCoverage.filter(x => x.found).map(x => entityLabel(x.name));
+  const missingExpected = expectedCoverage.filter(x => !x.found).map(x => entityLabel(x.name));
+  const coverageByEntity = expectedCoverage.length
+    ? expectedCoverage.map(x => `${entityLabel(x.name)}: ${x.found ? 'да' : 'нет'}`).join('\\n')
+    : 'нет ожидаемых сущностей для этого типа';
+  const reviewReasons = Array.isArray(rf.reasons) ? rf.reasons : [];
+  const statusWhy = [];
+  if(!r.has_full_extraction) statusWhy.push('нет full_extraction');
+  if(missingExpected.length) statusWhy.push(`не заполнены ожидаемые сущности: ${missingExpected.join(', ')}`);
+  if(reviewReasons.length) statusWhy.push(`есть причины needs_review: ${reviewReasons.join(', ')}`);
+  if(!statusWhy.length) statusWhy.push('критичных пробелов по требованиям не обнаружено');
+  const evidenceHints = [
+    ...(dc || []).map(x => x?.conclusion_text || ''),
+    ...(dc || []).map(x => x?.findings_text || ''),
+    ...(rec || []).map(x => x?.recommendation_text || ''),
+    ...(labItems || []).map(x => `${x?.parameter || ''} ${x?.result || ''}`),
+  ].filter(Boolean);
+  const evidenceSnippets = extractEvidenceSnippets(fe?.raw_text_excerpt || '', evidenceHints, 3);
+  const labText=labItems.length ? labItems.map(it=>`${it.section}: ${it.parameter||''} = ${it.result||''}${it.reference?` (референс: ${it.reference})`:''}`).join('\\n') : '';
+  const foundParts = [];
+  if(dc.length) foundParts.push(`<div class="sec"><div class="k">${conclusionLabel} (${dc.length})</div><div class="v">${line(dc.map(x=>[x.conclusion_text, x.findings_text?('описание: '+x.findings_text):''].filter(Boolean).join('\\n\\n')).join('\\n\\n----\\n\\n'))}</div></div>`);
+  if(labItems.length) foundParts.push(`<div class="sec"><div class="k">Лабораторные показатели (${r.lab_item_count||0})</div><div class="v">${line(labText)}</div></div>`);
+  if(rec.length) foundParts.push(`<div class="sec"><div class="k">Рекомендации (${rec.length})</div><div class="v">${line(rec.map(x=>x.recommendation_text).join('\\n\\n'))}</div></div>`);
+  if(!foundParts.length) foundParts.push('<div class="sec"><div class="k">Что найдено</div><div class="v">Явных клинически полезных блоков не выделено.</div></div>');
+
+  detail.innerHTML=`
+    <h2 style="margin:0 0 6px">${e(prettyFileName || r.file_name || '')}</h2>
+    ${showOriginalName ? `<div class="muted">${e(r.file_name || '')}</div>` : ''}
+    <div class="muted">${e(r.doc_id)}</div>
+    <div style="margin:10px 0;display:flex;gap:8px;flex-wrap:wrap">
+      ${pdfLink?`<a class="btn" href="${pdfLink}" target="_blank">Открыть PDF</a>`:''}
+      ${feLink?`<a class="btn" href="${feLink}" target="_blank">Открыть full_extraction JSON</a>`:''}
+      <button class="btn-danger" onclick="deleteDoc('${r.doc_id}')" ${deleteApiReady?'':'disabled title="API удаления недоступен"'}>Удалить документ</button>
+    </div>
+
+    <div class="sec"><div class="k">Главное</div><div class="v">Тип: ${e(typeHuman)} (${e(r.doc_type||'')})\nДата: ${e(r.event_date_raw||'')}\nСтатус качества: ${e(qualityLabel(r.quality_status||''))}\nНужна ручная проверка: ${e(r.review_required ? 'да' : 'нет')}</div></div>
+    <div class="sec"><div class="k">Почему такой статус</div><div class="v">Ожидалось сущностей: ${e(expectedEntities.length)}\nНайдено ожидаемых: ${e(foundExpected.length)}${foundExpected.length ? ` (${e(foundExpected.join(', '))})` : ''}\nПропущено ожидаемых: ${e(missingExpected.length)}${missingExpected.length ? ` (${e(missingExpected.join(', '))})` : ''}\nfull_extraction: ${e(r.has_full_extraction ? 'да' : 'нет')}\nexpected_facts: ${e(r.has_expected_facts ? 'да' : 'нет')}\nПричины статуса: ${e(statusWhy.join(' | '))}</div></div>
+    <div class="sec"><div class="k">Покрытие по ожидаемым сущностям</div><div class="v">${line(coverageByEntity)}</div></div>
+    ${foundParts.join('')}
+    <div class="sec"><div class="k">Доказательства из текста документа</div><div class="v">${evidenceSnippets.length ? line(evidenceSnippets.map((x,i)=>`${i+1}. ${x}`).join('\\n')) : 'Фрагменты не найдены автоматически. Проверьте PDF вручную.'}</div></div>
+    <div class="sec"><div class="k">Источник</div><div class="v">Путь: ${e(r.source_rel||'')}\nОжидаемые сущности: ${e(expectedHuman.join(', ')||'нет')}</div></div>
+
+    <div class="sec">
+      <details>
+        <summary>Технические детали извлечения</summary>
+        <div class="v">Покрытие: full_extraction=${r.has_full_extraction} | expected_facts=${r.has_expected_facts}</div>
+        <div class="v">Причины review: ${e((rf.reasons||[]).join(', ')||'нет')}</div>
+        <div class="v">Тип визита: ${e(fe?.summary?.visit_type||'')}</div>
+        <div class="v">Итоговая рекомендация: ${e(fe?.summary?.recommendation||'нет')}</div>
+        <div class="v">Распознано lab_items: ${e(r.lab_item_count||0)}</div>
+        <div class="v" style="margin-top:8px">${line(fe?.raw_text_excerpt||'')}</div>
+      </details>
+    </div>
+  `;
+}
+
+async function deleteDoc(docId){
+  if(!deleteApiReady){ setNotice('Удаление недоступно: API не отвечает.', true); return; }
   const r=rows.find(x=>x.doc_id===docId);
   if(!r) return;
-  const ask=confirm(`Delete document ${{r.file_name}} (${{docId}}) and all linked files?`);
+  const ask=confirm(`Удалить документ ${r.file_name} (${docId}) и все связанные файлы?`);
   if(!ask) return;
-  try {{
-    const res=await fetch(apiUrl('/api/delete'), {{
+  try {
+    const res=await fetch(deleteApiUrl('/api/delete'), {
       method:'POST',
-      headers:{{'Content-Type':'application/json'}},
-      body: JSON.stringify({{doc_id: docId}})
-    }});
-    const payload = await res.json().catch(()=>({{}}));
-    if(!res.ok) throw new Error(payload.error||`HTTP ${{res.status}}`);
-    rows = rows.filter(x => x.doc_id !== docId);
-    rows.forEach((x,i)=>x.idx=i+1);
-    setNotice(`Deleted ${{docId}}. Removed files: ${{(payload.deleted_paths||[]).length}}.`, false);
-    filt();
-  }} catch(err) {{
-    setNotice(`Delete failed for ${{docId}}: ${{err.message}}`, true);
-  }}
-}}
-function filt(){{
-  const qv=q.value.toLowerCase().trim(), tv=tF.value, sv=sF.value, rv=rF.value, sb=sB.value;
-  let list=rows.filter(r=> {{
-    const hay=[r.file_name,r.doc_id,r.source_rel,r.doc_type].join(' ').toLowerCase();
-    const reviewOk = !rv || (rv==='needs_review' ? !!r.review_required : !r.review_required);
-    return (!qv || hay.includes(qv)) && (!tv || r.doc_type===tv) && (!sv || r.quality_status===sv) && reviewOk;
-  }});
-  list.sort((a,b)=> {{
-    if(sb==='idx') return a.idx-b.idx;
-    const av=(a[sb]??'').toString(), bv=(b[sb]??'').toString();
-    return av.localeCompare(bv,'ru');
-  }});
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({doc_id: docId})
+    });
+    const payload = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(payload.error||payload.detail||`HTTP ${res.status}`);
+    const rebuild = payload.rebuild || {};
+    const rebuildMsg = rebuild.ok===false ? ' Пересчет после удаления завершился ошибкой, см. логи API.' : '';
+    setNotice(`Документ ${docId} удален. Удалено файлов: ${(payload.deleted_paths||[]).length}.${rebuildMsg}`, rebuild.ok===false);
+    await reloadAll();
+  } catch(err) {
+    setNotice(`Ошибка удаления ${docId}: ${err.message}`, true);
+  }
+}
+
+function compareRowsByDateDesc(a,b){
+  const ad = toIsoDateKey(a.event_date_raw);
+  const bd = toIsoDateKey(b.event_date_raw);
+  const cmp = bd.localeCompare(ad, 'ru');
+  if(cmp !== 0) return cmp;
+  return parseNum(a.idx)-parseNum(b.idx);
+}
+
+function filt(){
+  const qv=q.value.toLowerCase().trim(), tv=tF.value;
+  const onlyProblems = !!problemOnlyToggleEl?.checked;
+  let list=rows.filter(r=> {
+    const hay=[r.file_name,r.doc_id,r.source_rel,r.doc_type,r.search_blob||''].join(' ').toLowerCase();
+    const problemOk = !onlyProblems || isProblematicRow(r);
+    return (!qv || hay.includes(qv)) && (!tv || r.doc_type===tv) && problemOk;
+  });
+  list.sort(compareRowsByDateDesc);
   render(list);
-}}
-function render(list){{
-  const c=rows.filter(r=>r.quality_status==='complete').length, i=rows.filter(r=>r.quality_status==='incomplete').length, rw=rows.filter(r=>r.quality_status==='review').length;
-  const rr=rows.filter(r=>!!r.review_required).length;
-  stats.innerHTML=`Total: <b>${{rows.length}}</b> | complete: <b>${{c}}</b> | incomplete: <b>${{i}}</b> | quality_review: <b>${{rw}}</b> | needs_review_flag: <b>${{rr}}</b> | filtered: <b>${{list.length}}</b>`;
-  tbody.innerHTML=list.map(r=>`<tr data-id="${{r.doc_id}}">
-    <td>${{r.idx}}</td>
-    <td>${{e(r.file_name)}}<div class="muted">${{e(r.doc_id)}}</div></td>
-    <td>${{e(r.doc_type)}}</td>
-    <td>${{e(r.event_date_raw||'')}}</td>
-    <td>${{e(r.parse_mode||'')}}</td>
-    <td>${{e(r.text_len||'')}}</td>
-    <td><span class="badge ${{r.quality_status}}">${{e(r.quality_status)}}</span></td>
-    <td><span class="badge ${{r.review_required?'review':'complete'}}">${{e(r.review_required?'needs_review':'ok')}}</span></td>
-    <td><button class="btn-danger-sm" data-del="${{r.doc_id}}" ${{apiReady?'':'disabled title="API unavailable"'}}>Delete</button></td>
-  </tr>`).join('');
+}
+
+function render(list){
+  const problemsTotal = rows.filter(isProblematicRow).length;
+  const familyCounts = rows.reduce((acc, r) => {
+    const k = docFamily(r.doc_type);
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {});
+  stats.innerHTML=`Показано: <b>${list.length}</b> из <b>${rows.length}</b> | проблемных: <b>${problemsTotal}</b> | анализы: <b>${familyCounts.labs||0}</b>, консультации: <b>${familyCounts.consult||0}</b>, снимки: <b>${familyCounts.imaging||0}</b>`;
+  tbody.innerHTML=list.map(r=>{
+    const pretty = prettifyFileName(r.file_name||'');
+    const raw = (r.file_name||'').toString();
+    const hint = `${raw}\\n${(r.doc_id||'').toString()}`;
+    const family = docFamily(r.doc_type);
+    return `<tr data-id="${r.doc_id}">
+    <td>${r.idx}</td>
+    <td title="${e(hint)}">${e(pretty)}</td>
+    <td><span class="type-chip type-${family}">${e(docTypeLabel(r.doc_type))}</span></td>
+    <td>${e(r.event_date_raw||'')}</td>
+    <td><span class="badge ${r.quality_status}">${e(qualityLabel(r.quality_status))}</span></td>
+    <td><button class="btn-danger-sm" data-del="${r.doc_id}" ${deleteApiReady?'':'disabled title="API удаления недоступен"'}>Удалить</button></td>
+  </tr>`;
+  }).join('');
+
   [...tbody.querySelectorAll('tr')].forEach(tr=>tr.onclick=()=>show(tr.dataset.id));
-  [...tbody.querySelectorAll('button[data-del]')].forEach(btn=>btn.onclick=(ev)=>{{ ev.stopPropagation(); deleteDoc(btn.dataset.del); }});
-  if(list.length) show(list[0].doc_id); else detail.innerHTML='Нет документов по фильтрам';
-}}
-function show(id){{
-  const r=rows.find(x=>x.doc_id===id); if(!r) return;
-  const dc=(r.doctor_conclusions||[]), rec=(r.recommendations||[]), labs=(r.labs||[]), labItems=(r.lab_items_preview||[]);
-  const rf=(r.review_flags||{{}});
-  const fe=r.full_extraction||null;
-  const conclusionLabel=(r.doc_type||'').startsWith('imaging_report_')
-    ? 'imaging_conclusions'
-    : 'doctor_conclusions';
-  const pdfLink=assetHref(r.source_rel, r.pdf_link?.href||'');
-  const feLink=assetHref(fe?._path||'', r.full_extraction_link?.href||'');
-  const labText=labItems.length
-    ? labItems.map(it=>`${{it.section}}: ${{it.parameter||''}} = ${{it.result||''}}${{it.reference?` (ref: ${{it.reference}})`:''}}`).join('\\n')
-    : '';
-  detail.innerHTML=`
-    <h2 style="margin:0 0 6px">${{e(r.file_name)}}</h2>
-    <div class="muted">${{e(r.doc_id)}} | <span class="badge ${{r.quality_status}}">${{e(r.quality_status)}}</span> | review: <span class="badge ${{r.review_required?'review':'complete'}}">${{e(r.review_required?'needs_review':'ok')}}</span> | type: <b>${{e(r.doc_type)}}</b></div>
-    <div style="margin:10px 0;display:flex;gap:8px;flex-wrap:wrap">
-      ${{pdfLink?`<a class="btn" href="${{pdfLink}}" target="_blank">Open PDF</a>`:''}}
-      ${{feLink?`<a class="btn" href="${{feLink}}" target="_blank">Open full_extraction JSON</a>`:''}}
-      <button class="btn-danger" onclick="deleteDoc('${{r.doc_id}}')" ${{apiReady?'':'disabled title="API unavailable"'}}>Delete Document</button>
-    </div>
-    <div class="sec"><div class="k">coverage</div><div class="v">full_extraction=${{r.has_full_extraction}} | expected_facts=${{r.has_expected_facts}} | expected_entities=${{e((r.expected_entities||[]).join(', ')||'none')}}</div></div>
-    <div class="sec"><div class="k">review flags</div><div class="v">needs_review=${{e(!!r.review_required)}} | doctor_conclusions=${{e(!!rf.doctor_needs_review)}} | recommendations=${{e(!!rf.recommendations_needs_review)}} | labs=${{e(!!rf.labs_review_required)}} | full_extraction=${{e(!!rf.full_extraction_review_required)}} | reasons=${{e((rf.reasons||[]).join(', ')||'none')}}</div></div>
-    <div class="sec"><div class="k">${{conclusionLabel}} (${{dc.length}})</div><div class="v">${{dc.length?line(dc.map(x=>[x.conclusion_text, x.findings_text?('findings: '+x.findings_text):''].filter(Boolean).join('\\n\\n')).join('\\n\\n----\\n\\n')):'none'}}</div></div>
-    <div class="sec"><div class="k">recommendations (${{rec.length}})</div><div class="v">${{rec.length?line(rec.map(x=>x.recommendation_text).join('\\n\\n')):'none'}}</div></div>
-    <div class="sec"><div class="k">labs (${{labs.length}} records, ${{r.lab_item_count||0}} items)</div><div class="v">${{labItems.length?line(labText):'none'}}</div></div>
-    <div class="sec"><div class="k">full extraction summary</div>
-      <div class="v">visit_type: ${{e(fe?.summary?.visit_type||'')}}</div>
-      <div class="v">recommendation: ${{e(fe?.summary?.recommendation||'')}}</div>
-      <div class="v">lab_items_parsed: ${{e(r.lab_item_count||0)}}</div>
-    </div>
-    <div class="sec"><details><summary>raw excerpt</summary><div class="v">${{line(fe?.raw_text_excerpt||'')}}</div></details></div>
-  `;
-}}
-[q,tF,sF,rF,sB].forEach(x=>x.addEventListener('input',filt));
-[tF,sF,rF,sB].forEach(x=>x.addEventListener('change',filt));
-filt();
-probeApi();
+  [...tbody.querySelectorAll('button[data-del]')].forEach(btn=>btn.onclick=(ev)=>{ ev.stopPropagation(); deleteDoc(btn.dataset.del); });
+
+  const keepId = selectedDocId && list.some(x=>x.doc_id===selectedDocId) ? selectedDocId : (list[0]?.doc_id || '');
+  if(keepId){
+    show(keepId);
+  } else {
+    selectedDocId = '';
+    detail.innerHTML='Нет документов по текущим фильтрам';
+  }
+}
+
+async function show(id){
+  selectedDocId = id;
+  detail.innerHTML = 'Загрузка...';
+  try {
+    await loadAndRenderDetail(id);
+  } catch(err) {
+    detail.innerHTML = `<div class="k">Не удалось загрузить детали</div><div class="v">${e(err.message)}</div>`;
+  }
+}
+
+async function reloadAll(){
+  try {
+    await loadRows();
+    await loadQualitySummary();
+    await loadPatientBriefing();
+    await loadLabSummary();
+    if(advancedModeEnabled){
+      await loadFactQueue();
+      await loadAnalyticsSnapshot();
+    }
+    await probeDeleteApi();
+    filt();
+  } catch(err) {
+    setNotice(`API чтения недоступен: ${err.message}`, true);
+    rows = [];
+    buildTypeOptions();
+    filt();
+  }
+}
+
+[q,tF].forEach(x=>x.addEventListener('input',filt));
+[tF].forEach(x=>x.addEventListener('change',filt));
+if(problemOnlyToggleEl) problemOnlyToggleEl.addEventListener('change',filt);
+if(factCollectionFilterEl) factCollectionFilterEl.addEventListener('change', ()=>loadFactQueue());
+if(factStateFilterEl) factStateFilterEl.addEventListener('change', ()=>loadFactQueue());
+if(factLimitFilterEl) factLimitFilterEl.addEventListener('change', ()=>loadFactQueue());
+if(factQueueRefreshBtn) factQueueRefreshBtn.addEventListener('click', ()=>loadFactQueue());
+if(briefingRefreshBtn) briefingRefreshBtn.addEventListener('click', ()=>loadPatientBriefing());
+if(briefingBuildBtn) briefingBuildBtn.addEventListener('click', ()=>rebuildPatientBriefing());
+if(labSummarySearchEl) labSummarySearchEl.addEventListener('input', ()=>renderLabSummary());
+if(labSummaryFlagFilterEl) labSummaryFlagFilterEl.addEventListener('change', ()=>renderLabSummary());
+if(labSummaryRefreshBtn) labSummaryRefreshBtn.addEventListener('click', ()=>loadLabSummary());
+if(analyticsClusterSelectEl) analyticsClusterSelectEl.addEventListener('change', ()=>renderAnalyticsDrilldown(analyticsClusterSelectEl.value));
+if(advancedModeToggleEl) advancedModeToggleEl.addEventListener('change', ()=>setAdvancedMode(advancedModeToggleEl.checked));
+document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', ()=>setActiveView(btn.dataset.view)));
+
+setAdvancedMode(false);
+reloadAll();
 </script>
 </body></html>"""
 
+    OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(html_out, encoding="utf-8")
     print(str(OUT).replace("\\", "/"))
 
 
 if __name__ == "__main__":
     build()
+
+
+

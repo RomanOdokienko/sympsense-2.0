@@ -20,6 +20,51 @@
 - Автоматизация добавляется только там, где реально снижает ручной труд.
 - Без медицинских диагнозов и назначений лечения.
 
+## Local API
+
+- Запуск: `sympsense serve-api --host 127.0.0.1 --port 8000`
+- Swagger: `http://127.0.0.1:8000/docs`
+- Детали: [docs/08_local_api.md](docs/08_local_api.md)
+
+## Self-check
+
+- CLI: `sympsense selfcheck`
+- API run: `POST http://127.0.0.1:8000/v1/selfcheck/run`
+- API latest: `GET http://127.0.0.1:8000/v1/selfcheck/latest`
+
+## Analytics graph
+
+- API: `GET http://127.0.0.1:8000/v1/analytics/body-graph`
+- Назначение: граф `condition_cluster -> investigation -> document` для downstream-аналитики
+
+## Downstream export
+
+- CLI: `sympsense export-downstream`
+- API (read): `GET http://127.0.0.1:8000/v1/export/downstream-v1`
+- API (build report): `POST http://127.0.0.1:8000/v1/export/downstream-v1/build`
+
+## Patient briefing
+
+- CLI: `sympsense patient-briefing`
+- API (read): `GET http://127.0.0.1:8000/v1/reports/patient-briefing/v1`
+- API (build report): `POST http://127.0.0.1:8000/v1/reports/patient-briefing/v1/build`
+
+## Problem list (curated)
+
+- CLI: `sympsense problem-list`
+- API (read): `GET http://127.0.0.1:8000/v1/facts/problem-list/v1`
+- API (build report): `POST http://127.0.0.1:8000/v1/facts/problem-list/v1/build`
+- Назначение: разделяет состояния на `stable_problem / episodic_condition / symptom_or_state / uncertain`
+
+## Documents Review UI
+
+- URL: `http://127.0.0.1:8000/ui`
+- Запускается в том же процессе `sympsense serve-api`
+- Отдельный UI-server больше не обязателен
+- В UI доступны блоки `Analytics Snapshot` и `Fact Review Queue`
+- В `Fact Review Queue` можно отмечать факты как `resolved/skipped`
+- В `Analytics Snapshot` доступен drill-down по condition clusters (связанные исследования/документы)
+
 ## Точка входа для нового чата
 
 1. [docs/00_start_here.md](docs/00_start_here.md)

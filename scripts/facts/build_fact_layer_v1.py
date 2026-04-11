@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import re
@@ -57,6 +57,14 @@ MED_STOPWORDS = {
     "рекомендуется",
     "рекомендуется:",
 }
+
+EXCLUDED_CONDITION_TERMS = (
+    "гельмин",
+    "глист",
+    "лямбли",
+    "токсокар",
+    "инваз",
+)
 
 MED_SIGNAL_RE = re.compile(
     r"(?:\b\d+[.,]?\d*\s*(?:мг|мл|мкг|г|ед)\b|"
@@ -230,11 +238,86 @@ def lab_qa_reasons(parameter: str, result_text: str, value_num: float | None, re
         reasons.append("suspicious_analyte_prefix")
     if parameter and len(parameter) < 3:
         reasons.append("short_analyte")
-    if value_num is None and not any(x in result_text.lower() for x in QUAL_WORDS):
-        reasons.append("unparsed_result")
+
+    if value_num is None:
+        result_low = result_text.lower()
+        has_qual_token = any(x in result_low for x in QUAL_WORDS)
+        has_textual_value = bool(re.search(r"[A-Za-zА-Яа-яЁё]{2,}", result_text))
+        if not has_qual_token and not has_textual_value:
+            reasons.append("unparsed_result")
+
     if not reference:
         reasons.append("missing_reference")
     return reasons
+
+
+def normalize_lab_parameter_and_reference(parameter: str, reference: str) -> tuple[str, str]:
+    p = normalize_space(parameter)
+    r = normalize_space(reference)
+    if not p:
+        return p, r
+
+    p = p.replace("пїЅ", "")
+    p = p.replace("в п/зр", " в п/зр ")
+    p = normalize_space(p)
+    # Unwrap broken tails: "(Базофилы)" -> "Базофилы", "Базофилы)" -> "Базофилы"
+    if p.startswith("(") and p.endswith(")") and len(p) > 2:
+        p = p[1:-1].strip()
+    if p.endswith(")") and "(" not in p:
+        p = p[:-1].strip()
+
+    analyte_core = re.search(r"([A-Z]{2,8}\s*\([^)]+\))", p)
+    if analyte_core and analyte_core.start() > 0:
+        prefix = normalize_space(p[: analyte_core.start()])
+        p = normalize_space(analyte_core.group(1))
+        if not r and prefix and len(prefix) <= 48:
+            r = prefix
+
+    # Prefix reference pattern for non-Latin analytes: "0 - 15мм/чСОЭ"
+    pref = re.match(
+        r"^(?P<ref>(?:[<>]=?\s*)?\d+[.,]?\d*\s*-\s*\d+[.,]?\d*(?:\s*[A-Za-zА-Яа-яЁё/%\^]+)?)\s*(?P<rest>[A-Za-zА-Яа-яЁё(].+)$",
+        p,
+    )
+    if pref:
+        if not r:
+            r = normalize_space(pref.group("ref"))
+        p = normalize_space(pref.group("rest"))
+
+    p = re.sub(r"^(?:\^?\d+\s*/\s*[A-Za-zА-Яа-я]+)\s*", "", p)
+    p = re.sub(r"^(?:[<>]=?\s*\d+[^\wA-Za-zА-Яа-я]*)\s*", "", p)
+    p = re.sub(r"^(?:[<>]=?\s*\d+)\s*", "", p)
+    p = re.sub(r"^(?:фл|мм/ч|г/л|мкмоль/л|ммоль/л|%)\s*", "", p, flags=re.IGNORECASE)
+    p = re.sub(r"^[^A-Za-zА-Яа-я]+", "", p)
+    p = normalize_space(p)
+
+    r = normalize_space(r)
+    if r:
+        r = re.sub(r"\bо\s*трицател\w*", "отрицательно", r, flags=re.IGNORECASE)
+        r = re.sub(r"\bн\s*орма\b", "норма", r, flags=re.IGNORECASE)
+        r = re.sub(
+            r"\b(отрицател\w*|положител\w*|норм\w*|не\s*обнаруж\w*)(?:\s*[A-Za-zА-Яа-яЁё0-9/%\^]+)+\b",
+            r"\1",
+            r,
+            flags=re.IGNORECASE,
+        )
+        r = re.sub(
+            r"^(<=?\s*\d+[.,]?\d*\s*-\s*)норм\w*(?:\s*[A-Za-zА-Яа-яЁё0-9/%\^]+)?$",
+            r"\1норма",
+            r,
+            flags=re.IGNORECASE,
+        )
+        rl = r.lower()
+        if rl.startswith("отрицател"):
+            r = "отрицательно"
+        elif rl.startswith("положител"):
+            r = "положительно"
+        elif rl.startswith("не обнаруж"):
+            r = "не обнаружено"
+        elif rl.startswith("норм"):
+            r = "норма"
+        r = normalize_space(r)
+
+    return p, r
 
 
 def clinical_qa_reasons(text: str, finding_type: str) -> list[str]:
@@ -246,6 +329,13 @@ def clinical_qa_reasons(text: str, finding_type: str) -> list[str]:
     if finding_type == "diagnosis" and not re.search(r"[A-ZА-Я]\d{1,2}(?:\.\d)?", text):
         reasons.append("no_icd_like_code")
     return reasons
+
+
+def is_excluded_condition_text(text: str) -> bool:
+    t = normalize_space(text).lower()
+    if not t:
+        return False
+    return any(token in t for token in EXCLUDED_CONDITION_TERMS)
 
 
 def infer_route(text: str) -> str | None:
@@ -457,6 +547,7 @@ def build_lab_facts(
                 parameter = normalize_space(str(item.get("parameter") or ""))
                 result_text = normalize_space(str(item.get("result") or ""))
                 reference = normalize_space(str(item.get("reference") or ""))
+                parameter, reference = normalize_lab_parameter_and_reference(parameter, reference)
                 unit = normalize_space(str(item.get("unit") or "")) or None
                 value_num = parse_numeric_value(result_text)
 
@@ -536,6 +627,8 @@ def build_clinical_facts(
                 pieces.append((fact_subtype, text))
 
         for idx, (subtype, text) in enumerate(pieces, start=1):
+            if is_excluded_condition_text(text):
+                continue
             qa_reasons = clinical_qa_reasons(text, subtype)
             qa_status = qa_from_reasons(qa_reasons)
 
@@ -820,3 +913,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

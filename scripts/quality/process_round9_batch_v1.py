@@ -70,6 +70,27 @@ def clean_text(text: str) -> str:
     return " ".join((text or "").replace("\r", "\n").replace("\t", " ").split())
 
 
+def strip_signature_tail(text: str) -> str:
+    src = (text or "").strip()
+    if not src:
+        return ""
+    markers = [
+        "\u041f\u041e\u0414\u041f\u0418\u0421\u0418",
+        "\u0414\u041e\u041a\u0423\u041c\u0415\u041d\u0422 \u041f\u041e\u0414\u041f\u0418\u0421\u0410\u041d",
+        "\u0421\u0412\u0415\u0414\u0415\u041d\u0418\u042f \u041e \u0421\u0415\u0420\u0422\u0418\u0424\u0418\u041a\u0410\u0422\u0415",
+        "\u041d\u041e\u041c\u0415\u0420 \u0421\u0415\u0420\u0422\u0418\u0424\u0418\u041a\u0410\u0422\u0410",
+        "\u0412\u041b\u0410\u0414\u0415\u041b\u0415\u0426:",
+        "\u0420\u0415\u041d\u0422\u0413\u0415\u041d\u041e\u041b\u0410\u0411\u041e\u0420\u0410\u041d\u0422",
+    ]
+    lower = src.lower()
+    cut = len(src)
+    for marker in markers:
+        idx = lower.find(marker.lower())
+        if idx != -1 and idx < cut:
+            cut = idx
+    return src[:cut].strip(" \n\r\t:;,-")
+
+
 def to_iso_date(value: str | None) -> str | None:
     if not value:
         return None
@@ -173,7 +194,16 @@ def normalize_specialty(visit_type: str, doc_type: str) -> str:
 
 
 def classify_doc_type(file_name: str, text: str) -> tuple[str, str, float]:
-    low = f"{file_name}\n{text}".lower()
+    fn = (file_name or "").lower()
+    low = f"{file_name}\\n{text}".lower()
+    if "\\u043a\\u043e\\u043d\\u0441\\u0443\\u043b\\u044c\\u0442\\u0430\\u0446" in fn or "\\u043e\\u0441\\u043c\\u043e\\u0442\\u0440" in fn:
+        return "doctor_consultation", "filename_consultation", 0.96
+    if (
+        "\\u043f\\u0440\\u0438\\u0435\\u043c \\u0432\\u0440\\u0430\\u0447\\u0430" in low
+        or "\\u043e\\u0441\\u043c\\u043e\\u0442\\u0440 \\u0442\\u0440\\u0430\\u0432\\u043c\\u0430\\u0442\\u043e\\u043b\\u043e\\u0433\\u0430" in low
+        or "\\u043a\\u043e\\u043d\\u0441\\u0443\\u043b\\u044c\\u0442\\u0430\\u0446\\u0438\\u044f \\u0432\\u0440\\u0430\\u0447\\u0430" in low
+    ):
+        return "doctor_consultation", "content_consultation", 0.94
     if any(x in low for x in ["магнитно-резонанс", "мрт"]):
         return "imaging_report_mri", "content_imaging_mri", 0.95
     if any(x in low for x in ["рентген", "рентгенограф"]):
@@ -238,7 +268,10 @@ def extract_doctor_fields(text: str, visit_type: str | None) -> tuple[str, str |
     if recommendation and len(recommendation) < 16:
         recommendation = ""
 
-    return clean_text(conclusion), clean_text(diagnosis) or None, clean_text(recommendation) or None
+    conclusion_clean = strip_signature_tail(clean_text(conclusion))
+    diagnosis_clean = strip_signature_tail(clean_text(diagnosis)) if diagnosis else ""
+    recommendation_clean = strip_signature_tail(clean_text(recommendation)) if recommendation else ""
+    return conclusion_clean, diagnosis_clean or None, recommendation_clean or None
 
 
 def extract_imaging_fields(text: str) -> tuple[str, str | None, str | None]:
@@ -264,7 +297,10 @@ def extract_imaging_fields(text: str) -> tuple[str, str | None, str | None]:
         recommendation = ""
     if recommendation and len(recommendation) < 16:
         recommendation = ""
-    return clean_text(conclusion), clean_text(findings) or None, clean_text(recommendation) or None
+    conclusion_clean = strip_signature_tail(clean_text(conclusion))
+    findings_clean = strip_signature_tail(clean_text(findings)) if findings else ""
+    recommendation_clean = strip_signature_tail(clean_text(recommendation)) if recommendation else ""
+    return conclusion_clean, findings_clean or None, recommendation_clean or None
 
 
 def sha1_doc_id(pdf_path: Path) -> str:
