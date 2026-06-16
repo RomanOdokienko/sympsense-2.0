@@ -36,93 +36,105 @@ def build() -> None:
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Sympsense 2.0</title>
 <style>
-body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:#f7f8fb;color:#111827}
+:root{
+  --bg:#13161c;--panel:#1e2230;--panel2:#252a38;--line:#2d3348;
+  --text:#e8eaf0;--muted:#7b82a0;
+  --green:#4ade80;--amber:#f59e0b;--red:#f87171;--blue:#60a5fa;
+}
+body{font-family:Segoe UI,Arial,sans-serif;margin:0;background:var(--bg);color:var(--text)}
 .wrap{padding:22px;max-width:1800px;margin:0 auto}
-.h1{font-size:42px;font-weight:800;margin:0 0 4px}
-.muted{color:#6b7280}
-.panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;min-width:0}
-.body{padding:12px}
-.notice{margin-top:8px;padding:8px 10px;border-radius:10px;font-size:13px;display:none}
-.notice.ok{display:block;background:#ecfdf5;border:1px solid #86efac;color:#166534}
-.notice.err{display:block;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}
-.quality-chip{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
-.quality-pass{background:#ecfdf5;color:#166534;border-color:#86efac}
-.quality-fail{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
-.quality-unknown{background:#f3f4f6;color:#374151;border-color:#d1d5db}
-.tabbar{display:flex;gap:8px;margin-top:14px}
-.tab-btn{padding:8px 12px;border:1px solid #d1d5db;border-radius:10px;background:#fff;color:#111827;cursor:pointer;font-size:14px}
-.tab-btn.active{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8}
-.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
-.switch{display:inline-flex;align-items:center;gap:8px;color:#374151;font-size:14px}
-.view{display:none;margin-top:12px}
+.h1{font-size:24px;font-weight:700;margin:0 0 3px;color:var(--text)}
+.muted{color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;min-width:0}
+.body{padding:14px}
+.notice{margin-top:10px;padding:8px 12px;border-radius:8px;font-size:13px;display:none}
+.notice.ok{display:block;background:#052e16;border:1px solid #166534;color:var(--green)}
+.notice.err{display:block;background:#1a0808;border:1px solid #7f1d1d;color:var(--red)}
+.quality-chip{display:inline-block;padding:2px 9px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.quality-pass{background:#052e16;color:var(--green);border-color:#166534}
+.quality-fail{background:#1a0808;color:var(--red);border-color:#7f1d1d}
+.quality-unknown{background:var(--panel2);color:var(--muted);border-color:var(--line)}
+.tabbar{display:flex;gap:6px;flex-wrap:wrap}
+.tab-btn{padding:6px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--muted);cursor:pointer;font-size:13px;text-decoration:none;transition:border-color .15s,color .15s;line-height:1.4}
+.tab-btn:hover{color:var(--text);border-color:var(--blue)}
+.tab-btn.active{background:var(--panel2);border-color:var(--blue);color:var(--text)}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;flex-wrap:wrap}
+.switch{display:inline-flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.switch input[type="checkbox"]{accent-color:var(--blue)}
+.view{display:none;margin-top:14px}
 .view.active{display:block}
-.docs-layout{display:grid;grid-template-columns:minmax(0,58%) minmax(0,42%);gap:16px;align-items:start}
+.docs-layout{display:grid;grid-template-columns:minmax(0,58%) minmax(0,42%);gap:14px;align-items:start}
 .detail-panel{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
 .controls{display:grid;grid-template-columns:1.8fr 1fr 1.2fr;gap:8px}
-input,select{padding:9px;border:1px solid #d1d5db;border-radius:10px;font-size:14px;width:100%;box-sizing:border-box}
+input,select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;width:100%;box-sizing:border-box;background:var(--panel2);color:var(--text)}
+input::placeholder{color:var(--muted)}
+select option{background:var(--panel2)}
 select{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .controls>*{min-width:0}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{border-bottom:1px solid #f0f1f3;padding:8px;text-align:left;vertical-align:top}
-tbody#rows tr:hover{background:#f8fafc;cursor:pointer}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
-.complete{background:#ecfdf5;color:#166534;border-color:#86efac}
-.incomplete{background:#fffbeb;color:#92400e;border-color:#fde68a}
-.review{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
-.type-chip{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #d1d5db;font-size:12px}
-.type-labs{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
-.type-consult{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
-.type-imaging{background:#fff7ed;color:#9a3412;border-color:#fdba74}
-.type-other{background:#f3f4f6;color:#374151;border-color:#d1d5db}
-.k{font-size:12px;color:#6b7280}
-.v{font-size:14px;white-space:pre-wrap;word-break:break-word}
-.sec{border-top:1px dashed #e5e7eb;padding-top:10px;margin-top:10px}
-.btn{display:inline-block;padding:6px 10px;border:1px solid #93c5fd;border-radius:10px;text-decoration:none;color:#1d4ed8;background:#eff6ff}
-.btn-danger{padding:6px 10px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}
-.btn-danger-sm{padding:4px 8px;font-size:12px;border:1px solid #ef4444;border-radius:10px;background:#fef2f2;color:#991b1b;cursor:pointer}
-.btn-danger-sm:disabled,.btn-danger:disabled{opacity:.45;cursor:not-allowed}
+th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top;color:var(--text)}
+th{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.complete{background:#052e16;color:var(--green);border-color:#166534}
+.incomplete{background:#1a1000;color:var(--amber);border-color:#92400e}
+.review{background:#1a0808;color:var(--red);border-color:#7f1d1d}
+.type-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+.type-labs{background:#0a1428;color:var(--blue);border-color:#1e3a6a}
+.type-consult{background:#052e16;color:var(--green);border-color:#166534}
+.type-imaging{background:#1a1000;color:var(--amber);border-color:#92400e}
+.type-other{background:var(--panel2);color:var(--muted);border-color:var(--line)}
+.k{font-size:12px;color:var(--muted)}
+.v{font-size:13px;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.sec{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}
+.btn{display:inline-block;padding:5px 10px;border:1px solid #1e3a6a;border-radius:8px;text-decoration:none;color:var(--blue);background:#0a1428;font-size:12px}
+.btn-danger{padding:5px 10px;border:1px solid #7f1d1d;border-radius:8px;background:#1a0808;color:var(--red);cursor:pointer;font-size:12px}
+.btn-danger-sm{padding:3px 8px;font-size:11px;border:1px solid #7f1d1d;border-radius:6px;background:transparent;color:var(--red);cursor:pointer}
+.btn-danger-sm:disabled,.btn-danger:disabled{opacity:.35;cursor:not-allowed}
 .card-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.card{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fafafa}
-.card .num{font-size:20px;font-weight:700}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel2)}
+.card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.card .num{font-size:22px;font-weight:700;color:var(--text)}
 .lab-table{width:100%;table-layout:fixed}
-.lab-table th{font-size:12px;color:#6b7280;background:#f9fafb}
-.lab-table td{font-size:13px}
+.lab-table th{font-size:11px;color:var(--muted);background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+.lab-table td{font-size:13px;color:var(--text)}
 .lab-table th,.lab-table td{word-break:break-word}
 .analytics-list{margin-top:8px}
-.analytics-row{padding:5px 0;border-bottom:1px dotted #eceff3}
+.analytics-row{padding:6px 0;border-bottom:1px solid var(--line);color:var(--text)}
 .analytics-row:last-child{border-bottom:none}
-.queue-item{border:1px solid #e5e7eb;border-radius:10px;padding:8px;margin:8px 0;background:#fff}
-.queue-item .meta{font-size:12px;color:#6b7280;margin-bottom:4px}
-.queue-item .txt{font-size:13px;line-height:1.35}
-.link-btn{font-size:12px;padding:2px 6px;border:1px solid #93c5fd;border-radius:8px;background:#eff6ff;color:#1d4ed8;cursor:pointer}
+.queue-item{border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0;background:var(--panel2)}
+.queue-item .meta{font-size:12px;color:var(--muted);margin-bottom:6px}
+.queue-item .txt{font-size:13px;line-height:1.4;color:var(--text)}
+.link-btn{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer}
+.link-btn:hover{border-color:#1e3a6a;color:var(--blue)}
 .queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
 .lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;margin-bottom:8px}
-.lab-trend-up{color:#b91c1c;font-weight:600}
-.lab-trend-down{color:#0369a1;font-weight:600}
-.lab-trend-flat{color:#374151;font-weight:600}
-.lab-value-ok{color:#15803d;font-weight:600}
-.lab-value-alert{color:#b91c1c;font-weight:600}
-details.sec summary{cursor:pointer;user-select:none}
+.lab-trend-up{color:var(--red);font-weight:600}
+.lab-trend-down{color:var(--blue);font-weight:600}
+.lab-trend-flat{color:var(--muted);font-weight:600}
+.lab-value-ok{color:var(--green);font-weight:600}
+.lab-value-alert{color:var(--red);font-weight:600}
+details.sec summary{cursor:pointer;user-select:none;color:var(--text)}
 details.sec[open] summary{margin-bottom:6px}
-.briefing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:10px}
-.briefing-section{border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#fff}
-.briefing-section h3{margin:0;font-size:16px}
-.briefing-sub{margin-top:4px;color:#6b7280;font-size:13px}
-.briefing-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.briefing-item{border:1px solid #e5e7eb;border-radius:10px;padding:8px;background:#fcfcfd}
+.briefing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.briefing-section{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--panel2)}
+.briefing-section h3{margin:0;font-size:14px;font-weight:600;color:var(--text)}
+.briefing-sub{margin-top:3px;color:var(--muted);font-size:12px}
+.briefing-list{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.briefing-item{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel)}
 .briefing-item .head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
-.briefing-item .title{font-weight:600}
-.briefing-item .meta{font-size:12px;color:#6b7280;margin-top:3px}
-.briefing-item .txt{font-size:13px;line-height:1.4;margin-top:5px}
+.briefing-item .title{font-weight:600;font-size:13px;color:var(--text)}
+.briefing-item .meta{font-size:11px;color:var(--muted);margin-top:3px}
+.briefing-item .txt{font-size:13px;line-height:1.4;margin-top:5px;color:var(--muted)}
 .briefing-bullets{margin:8px 0 0 0;padding-left:18px}
-.briefing-bullets li{margin:4px 0}
-.prio-chip{display:inline-flex;align-items:center;border-radius:999px;font-size:11px;padding:2px 8px;border:1px solid}
-.prio-high{background:#fef2f2;color:#991b1b;border-color:#fca5a5}
-.prio-medium{background:#fffbeb;color:#92400e;border-color:#fde68a}
-.prio-low{background:#eff6ff;color:#1e40af;border-color:#bfdbfe}
+.briefing-bullets li{margin:4px 0;font-size:13px;color:var(--muted)}
+.prio-chip{display:inline-flex;align-items:center;border-radius:999px;font-size:11px;padding:2px 8px;border:1px solid;white-space:nowrap}
+.prio-high{background:#1a0808;color:var(--red);border-color:#7f1d1d}
+.prio-medium{background:#1a1000;color:var(--amber);border-color:#92400e}
+.prio-low{background:#0a1428;color:var(--blue);border-color:#1e3a6a}
 .briefing-checklist{margin:8px 0 0 0;padding-left:18px}
 .briefing-checklist li{margin:6px 0}
-@media (max-width: 1180px){
+@media(max-width:1180px){
   .docs-layout{grid-template-columns:1fr}
   .detail-panel{position:static;max-height:none;overflow:visible}
   .card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -135,14 +147,17 @@ details.sec[open] summary{margin-bottom:6px}
 </head>
 <body>
 <div class="wrap">
-  <div class="h1">Sympsense 2.0</div>
-  <div class="muted" id="qualityLine" style="margin-top:4px"></div>
+  <div style="display:flex;justify-content:space-between;align-items:baseline">
+    <div class="h1">Sympsense 2.0</div>
+    <a href="/longevity" style="font-size:13px;color:var(--muted);text-decoration:none">Longevity ↗</a>
+  </div>
+  <div class="muted" id="qualityLine" style="font-size:12px;margin-top:2px"></div>
   <div id="notice" class="notice"></div>
 
   <div class="toolbar">
     <div class="tabbar">
       <button class="tab-btn active" data-view="briefing">Сводка</button>
-      <button class="tab-btn" data-view="labs">Анализы (динамика)</button>
+      <button class="tab-btn" data-view="labs">Анализы</button>
       <button class="tab-btn" data-view="docs">Документы</button>
       <button class="tab-btn" data-view="review" data-advanced="true">Проверка фактов</button>
       <button class="tab-btn" data-view="analytics" data-advanced="true">Граф связей</button>
@@ -160,7 +175,7 @@ details.sec[open] summary{margin-bottom:6px}
           <div class="controls">
             <input id="q" placeholder="Поиск по названию, содержимому, doc_id"/>
             <select id="typeFilter"><option value="">Все типы документов</option></select>
-            <label class="switch" style="padding:0 8px;border:1px solid #d1d5db;border-radius:10px;background:#fff">
+            <label class="switch" style="padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">
               <input id="problemOnlyToggle" type="checkbox"/>
               Только проблемные
             </label>
@@ -178,11 +193,13 @@ details.sec[open] summary{margin-bottom:6px}
 
   <div id="view-labs" class="view">
     <div class="panel"><div class="body">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div style="font-weight:700">Свод анализов по динамике</div>
-        <button id="labSummaryRefreshBtn" class="link-btn">Обновить</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--text)">Анализы: динамика по годам</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">по каждому показателю — значения по годам; пусто — не сдавался</div>
+        </div>
+        <button id="labSummaryRefreshBtn" class="link-btn" title="Обновить">↺</button>
       </div>
-      <div class="muted" style="margin:6px 0 10px 0">По каждому показателю показаны значения по годам. Пусто — в этом году показатель не сдавался.</div>
       <div class="lab-summary-controls">
         <input id="labSummarySearch" placeholder="Поиск по показателю"/>
         <select id="labSummaryFlagFilter">
@@ -197,8 +214,10 @@ details.sec[open] summary{margin-bottom:6px}
   </div>
   <div id="view-review" class="view" data-advanced="true">
     <div class="panel"><div class="body">
-      <div style="font-weight:700;margin-bottom:8px">Очередь проверки фактов</div>
-      <div class="muted" style="margin-bottom:8px">Здесь обрабатываются только спорные элементы базы.</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">Очередь проверки фактов</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">обрабатываются только спорные элементы базы</div>
+      </div>
       <div class="queue-controls">
         <select id="factCollectionFilter">
           <option value="">Все коллекции</option>
@@ -228,7 +247,10 @@ details.sec[open] summary{margin-bottom:6px}
 
   <div id="view-analytics" class="view" data-advanced="true">
     <div class="panel"><div class="body">
-      <div style="font-weight:700;margin-bottom:8px">Снимок графа связей</div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">Граф связей</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">кластеры состояний и связанные исследования</div>
+      </div>
       <div id="analyticsSnapshot" class="muted">Загрузка...</div>
       <div class="sec">
         <div class="k">Детализация по кластеру</div>
@@ -242,15 +264,17 @@ details.sec[open] summary{margin-bottom:6px}
 
   <div id="view-briefing" class="view active">
     <div class="panel"><div class="body">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-        <div style="font-weight:700">Краткая медицинская сводка</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button id="briefingRefreshBtn" class="link-btn">Обновить</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div>
+          <div style="font-size:15px;font-weight:600;color:var(--text)">Краткая медицинская сводка</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">ключевые состояния и динамика по собранным документам</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button id="briefingRefreshBtn" class="link-btn" title="Обновить">↺</button>
           <button id="briefingBuildBtn" class="link-btn">Пересчитать</button>
         </div>
       </div>
-      <div class="muted" style="margin-top:6px">Ключевые состояния и динамика по собранным документам.</div>
-      <div id="briefingPanel" class="muted" style="margin-top:10px">Загрузка...</div>
+      <div id="briefingPanel" class="muted">Загрузка...</div>
     </div></div>
   </div>
 </div>
