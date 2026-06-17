@@ -112,9 +112,9 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-stat-high{border-color:#21543c;background:#162a20;color:#93d1ab}
 .lab-stat-low{border-color:#42495f;background:#1a1f2c;color:#98a0b7}
 .lab-section{border-top:1px solid #384056;padding-top:12px;margin-top:14px}
-.lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#202534;border:1px solid #30374c;color:#d8dce8}
+.lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#202534;border:1px solid #30374c;border-left-width:3px;color:#d8dce8}
 .lab-section summary::-webkit-details-marker{display:none}
-.lab-section summary::before{content:"";width:7px;height:7px;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
+.lab-section summary::before{content:"";width:7px;height:7px;flex-shrink:0;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
 .lab-section[open] summary::before{transform:rotate(45deg)}
 .lab-section-title{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
 .lab-section-count{font-size:11px;color:var(--muted)}
@@ -1000,6 +1000,20 @@ const LAB_GROUP_ORDER = [
   'Группа крови',
   'Прочее',
 ];
+const LAB_GROUP_COLORS = {
+  'ОАК / гематология':        '#f87171',
+  'Биохимия':                 '#60a5fa',
+  'Обмен железа / витамины':  '#4ade80',
+  'Гормоны':                  '#a78bfa',
+  'Коагулограмма':            '#2dd4bf',
+  'Анализ мочи':              '#f59e0b',
+  'Инфекции / серология / ПЦР': '#f472b6',
+  'Цитология / патология':    '#94a3b8',
+  'Группа крови':             '#818cf8',
+  'Прочее':                   '#7b82a0',
+  'Качественные / без динамики': '#4b5578',
+};
+function labGroupColor(g){ return LAB_GROUP_COLORS[g] || '#7b82a0'; }
 
 const LAB_GROUP_RULES = [
   {
@@ -1316,17 +1330,19 @@ function renderLabSummaryTable(items, options = {}){
     const sectionCountLabel = (collapseLowUtility && collapsedRows.length && visibleRows.length)
       ? `${visibleRows.length} · <span style="color:var(--muted)">${collapsedRows.length} ↓</span>`
       : `${rows.length}`;
+    const gc = labGroupColor(g);
+    const tint = `${gc}0d`;
     parts.push(`
-      <details class="lab-section" open>
-        <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${sectionCountLabel}</span></summary>
+      <details class="lab-section" open style="--gc:${gc}">
+        <summary style="border-left-color:${gc};background:${tint}"><span class="lab-section-title" style="color:${gc}">${e(g)}</span><span class="lab-section-count">${sectionCountLabel}</span></summary>
         <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
         ${collapsedBlock}
       </details>
     `);
   }
   parts.push(`
-    <details class="lab-section">
-      <summary><span class="lab-section-title">Качественные / без динамики</span><span class="lab-section-count">${nonDetected.length}</span></summary>
+    <details class="lab-section" style="--gc:${labGroupColor('Качественные / без динамики')}">
+      <summary style="border-left-color:${labGroupColor('Качественные / без динамики')};background:${labGroupColor('Качественные / без динамики')}0d"><span class="lab-section-title" style="color:${labGroupColor('Качественные / без динамики')}">Качественные / без динамики</span><span class="lab-section-count">${nonDetected.length}</span></summary>
       <div style="margin-top:8px">${nonDetected.length ? renderLabSummaryTableMarkup(nonDetected) : '<div class="muted">Нет строк в этой группе.</div>'}</div>
     </details>
   `);
