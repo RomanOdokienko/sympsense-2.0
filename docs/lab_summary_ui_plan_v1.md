@@ -11,6 +11,7 @@ Already implemented on `main`:
 3. Grouped lab classification with documented rationale in `docs/lab_classification_v1.md`.
 4. Clinical ordering inside groups instead of alphabetic ordering.
 5. Lightweight usefulness levels for display rows: `high`, `medium`, `low`.
+6. Low-utility rows are collapsed by default inside groups unless search is active or the `low` filter is selected.
 
 Recent commits:
 
@@ -55,6 +56,9 @@ Result:
 ## Remaining plan
 
 ### Iteration 3: Collapse low-utility rows by default
+
+Status:
+Implemented.
 
 Goal:
 Make the table easier to scan without deleting or hiding data irreversibly.
@@ -134,6 +138,6 @@ If continuing from here, start with:
 4. rebuild UI
 5. verify in browser on `/ui`
 
-Good next commit message for iteration 3:
+Good next commit message for iteration 4:
 
-- `ui: collapse low-utility lab rows by default`
+- `ui: refine collapsed lab archive behavior`

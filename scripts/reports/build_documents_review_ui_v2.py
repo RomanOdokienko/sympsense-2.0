@@ -118,6 +118,13 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-section[open] summary::before{transform:rotate(45deg)}
 .lab-section-title{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
 .lab-section-count{font-size:11px;color:var(--muted)}
+.lab-collapse-box{margin-top:8px;border:1px solid #30374c;border-radius:8px;background:#1b2030}
+.lab-collapse-box summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;color:#c8cede;cursor:pointer}
+.lab-collapse-box summary::-webkit-details-marker{display:none}
+.lab-collapse-box summary::before{content:"";width:7px;height:7px;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
+.lab-collapse-box[open] summary::before{transform:rotate(45deg)}
+.lab-collapse-label{font-size:12px;font-weight:600}
+.lab-collapse-meta{font-size:11px;color:var(--muted)}
 .analytics-list{margin-top:8px}
 .analytics-row{padding:6px 0;border-bottom:1px solid var(--line);color:var(--text)}
 .analytics-row:last-child{border-bottom:none}
@@ -1178,6 +1185,15 @@ function rowIsNonDetectedOrMissing(row){
   return points.every(p => isUninformativeLabValue((p || {}).value_text || ''));
 }
 
+function russianPlural(count, one, few, many){
+  const n = Math.abs(Number(count) || 0);
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if(mod10 === 1 && mod100 !== 11) return one;
+  if(mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+  return many;
+}
+
 function renderLabSummaryTableMarkup(items){
   const yearCount = Math.max((labSummaryYears || []).length, 1);
   const yearWidth = (34 / yearCount).toFixed(3);
@@ -1230,12 +1246,13 @@ function renderLabSummaryTableMarkup(items){
   `;
 }
 
-function renderLabSummaryTable(items){
+function renderLabSummaryTable(items, options = {}){
   if(!labSummaryPanelEl) return;
   if(!items.length){
     labSummaryPanelEl.innerHTML = '<div class="muted">Нет показателей под текущие фильтры.</div>';
     return;
   }
+  const collapseLowUtility = !!options.collapseLowUtility;
 
   const nonDetected = [];
   const grouped = new Map();
@@ -1258,10 +1275,23 @@ function renderLabSummaryTable(items){
   for(const g of order){
     const rows = grouped.get(g) || [];
     if(!rows.length) continue;
+    const visibleRows = collapseLowUtility ? rows.filter(row => (row.usefulness_level || '') !== 'low') : rows;
+    const collapsedRows = collapseLowUtility ? rows.filter(row => (row.usefulness_level || '') === 'low') : [];
+    const tableRows = visibleRows.length ? visibleRows : collapsedRows;
+    const collapsedBlock = collapsedRows.length && visibleRows.length ? `
+      <details class="lab-collapse-box">
+        <summary>
+          <span class="lab-collapse-label">Еще ${collapsedRows.length} ${russianPlural(collapsedRows.length, 'строка', 'строки', 'строк')}</span>
+          <span class="lab-collapse-meta">низкая полезность</span>
+        </summary>
+        <div style="padding:0 8px 8px">${renderLabSummaryTableMarkup(collapsedRows)}</div>
+      </details>
+    ` : '';
     parts.push(`
       <details class="lab-section" open>
         <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${rows.length}</span></summary>
-        <div style="margin-top:8px">${renderLabSummaryTableMarkup(rows)}</div>
+        <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
+        ${collapsedBlock}
       </details>
     `);
   }
@@ -1298,6 +1328,8 @@ function renderLabSummary(){
   const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
   const highUtility = filtered.filter(x => (x.usefulness_level || '') === 'high').length;
   const lowUtility = filtered.filter(x => (x.usefulness_level || '') === 'low').length;
+  const collapseLowUtility = !query && flag !== 'low';
+  const collapsedLowUtility = collapseLowUtility ? lowUtility : 0;
   const st = labSummaryDuplicateStats || {};
   const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
   const duplicateTitle = st.hidden
@@ -1310,11 +1342,12 @@ function renderLabSummary(){
       <span class="lab-stat" title="Строки данных"><b>${Number(st.visible || 0)}</b>/<span>${Number(st.total || 0)}</span> строк</span>
       <span class="lab-stat lab-stat-high" title="Строки с высокой полезностью для обзора"><b>${highUtility}</b> выс.</span>
       <span class="lab-stat lab-stat-low" title="Строки с низкой полезностью: редкие, качественные или слабодинамичные"><b>${lowUtility}</b> низк.</span>
+      <span class="lab-stat" title="Низкополезные строки, свернутые по умолчанию"><b>${collapsedLowUtility}</b> сверн.</span>
       <span class="lab-stat" title="${e(duplicateTitle)}"><b>${Number(st.hidden || 0)}</b> ${e(duplicateLabel)}</span>
       <span class="lab-stat lab-stat-alert" title="Показатели с отклонениями"><b>${abnormalSeries}</b> откл.</span>
     </div>
   `;
-  renderLabSummaryTable(filtered);
+  renderLabSummaryTable(filtered, { collapseLowUtility });
 }
 
 function rebuildLabSummaryFromFacts(){
