@@ -109,6 +109,8 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-stat{display:inline-flex;align-items:baseline;gap:4px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#202534;color:var(--muted);white-space:nowrap}
 .lab-stat b{font-size:12px;color:#d8dce8;font-weight:600}
 .lab-stat-alert{border-color:#573142;background:#281b27;color:#d6a2ad}
+.lab-stat-high{border-color:#21543c;background:#162a20;color:#93d1ab}
+.lab-stat-low{border-color:#42495f;background:#1a1f2c;color:#98a0b7}
 .lab-section{border-top:1px solid #384056;padding-top:12px;margin-top:14px}
 .lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#202534;border:1px solid #30374c;color:#d8dce8}
 .lab-section summary::-webkit-details-marker{display:none}
@@ -223,6 +225,9 @@ details.sec[open] summary{margin-bottom:6px}
           <option value="">Все показатели</option>
           <option value="abnormal">Есть отклонения</option>
           <option value="normal">Без отклонений</option>
+          <option value="high">Высокая полезность</option>
+          <option value="medium">Средняя полезность</option>
+          <option value="low">Низкая полезность</option>
         </select>
         <label class="switch" style="padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">
           <input id="labSummaryShowDuplicatesToggle" type="checkbox"/>
@@ -847,6 +852,14 @@ function buildLabSummaryRows(labFacts){
     const latestPoint = points[points.length - 1];
     const latestReference = (latestPoint?.reference || '').toString().trim();
     const latestDocId = (latestPoint?.doc_id || '').toString().trim();
+    const usefulness = labUsefulnessMeta({
+      analyte_name: g.analyte_name,
+      analyte_base_name: g.analyte_base_name || g.analyte_name,
+      classification_group: g.classification_group || 'Прочее',
+      analyte_id: g.rows.find(x => (x?.analyte_id || '').toString().trim())?.analyte_id || '',
+      abnormal_count: abnormalCount,
+      by_year: byYear,
+    }, years);
     out.push({
       analyte_name: g.analyte_name,
       analyte_base_name: g.analyte_base_name || g.analyte_name,
@@ -854,6 +867,12 @@ function buildLabSummaryRows(labFacts){
       classification_group: g.classification_group || 'Прочее',
       clinical_sort_rank: Number(g.clinical_sort_rank || 9000),
       abnormal_count: abnormalCount,
+      usefulness_score: usefulness.score,
+      usefulness_level: usefulness.level,
+      usefulness_recent_present: usefulness.recent_present,
+      usefulness_informative_count: usefulness.informative_count,
+      usefulness_core_bonus: usefulness.core_bonus,
+      usefulness_has_only_uninformative: usefulness.has_only_uninformative,
       by_year: byYear,
       latest_reference: latestReference,
       latest_doc_id: latestDocId,
@@ -889,19 +908,61 @@ function cleanReferenceText(ref){
 }
 
 function usefulnessScore(row, years){
+  return labUsefulnessMeta(row, years).score;
+}
+
+function labCoreMarkerBonus(row){
+  const group = (row?.classification_group || '').toString();
+  const analyteId = labNormText(row?.analyte_id || '');
+  const name = labNormText(row?.analyte_base_name || row?.analyte_name || '');
+  if(group === 'ОАК / гематология' && ['hemoglobin', 'rbc', 'hematocrit', 'wbc', 'neutrophils', 'lymphocytes', 'platelets', 'esr'].includes(analyteId)) return 18;
+  if(group === 'Биохимия' && (labTextHasAny(name, ['глюкоз', 'холестерин', 'лпнп', 'лпвп', 'триглицерид', 'креатинин', 'мочевина', 'аланинаминотрансфераза', 'аспартатаминотрансфераза', 'алт', 'аст', 'гамма-гт', 'ггт', 'билирубин']) || ['glucose', 'creatinine_egfr'].includes(analyteId))) return 18;
+  if(group === 'Обмен железа / витамины' && labTextHasAny(name, ['ферритин', 'железо', 'трансферрин', 'ожсс', 'лжсс', 'витамин d', '25(он) d', 'b12', 'в12', 'фолиевая кислота'])) return 16;
+  if(group === 'Гормоны' && labTextHasAny(name, ['ттг', 'тиреотроп', 'тестостерон', 'пролактин', 'эстрадиол', 'прогестерон', 'кортизол'])) return 14;
+  if(group === 'Коагулограмма' && labTextHasAny(name, ['мно', 'inr', 'ачтв', 'протромбин', 'фибриноген'])) return 14;
+  if(group === 'Анализ мочи' && labTextHasAny(name, ['белок', 'лейкоцит', 'эритроцит', 'нитрит', 'глюкоз'])) return 12;
+  return 0;
+}
+
+function labUsefulnessMeta(row, years){
   const sortedYears = [...(years || [])].sort((a,b)=>a.localeCompare(b));
   const recentYears = sortedYears.slice(-3);
   const points = Object.values(row.by_year || {});
   const recentPresent = recentYears.filter(y => !!(row.by_year || {})[y]).length;
   const informativeCount = points.filter(p => !isUninformativeLabValue((p || {}).value_text || '')).length;
   const hasOnlyUninformative = points.length > 0 && informativeCount === 0;
+  const abnormalCount = Number(row.abnormal_count || 0);
+  const coreBonus = labCoreMarkerBonus(row);
   let score = 0;
   score += recentPresent * 30;
   score += informativeCount * 6;
-  score += Number(row.abnormal_count || 0) * 3;
+  score += abnormalCount * 3;
+  score += coreBonus;
   if(recentPresent === 0) score -= 220;
   if(hasOnlyUninformative) score -= 140;
-  return score;
+  let level = 'low';
+  if(
+    abnormalCount > 0 ||
+    (coreBonus >= 14 && recentPresent >= 1) ||
+    (recentPresent >= 2 && informativeCount >= 2) ||
+    score >= 78
+  ){
+    level = 'high';
+  } else if(
+    score >= 28 ||
+    informativeCount >= 2 ||
+    (coreBonus > 0 && informativeCount >= 1)
+  ){
+    level = 'medium';
+  }
+  return {
+    score,
+    level,
+    recent_present: recentPresent,
+    informative_count: informativeCount,
+    has_only_uninformative: hasOnlyUninformative,
+    core_bonus: coreBonus,
+  };
 }
 
 const LAB_GROUP_ORDER = [
@@ -1098,8 +1159,8 @@ function compareLabSummaryRows(a, b){
   const aAbn = Number(a.abnormal_count || 0) > 0 ? 1 : 0;
   const bAbn = Number(b.abnormal_count || 0) > 0 ? 1 : 0;
   if(bAbn !== aAbn) return bAbn - aAbn;
-  const sa = usefulnessScore(a, labSummaryYears);
-  const sb = usefulnessScore(b, labSummaryYears);
+  const sa = Number(a.usefulness_score ?? usefulnessScore(a, labSummaryYears));
+  const sb = Number(b.usefulness_score ?? usefulnessScore(b, labSummaryYears));
   if(sb !== sa) return sb - sa;
   const aAbnCount = Number(a.abnormal_count || 0);
   const bAbnCount = Number(b.abnormal_count || 0);
@@ -1226,12 +1287,17 @@ function renderLabSummary(){
     if(query && !searchable.includes(query)) return false;
     if(flag === 'abnormal' && Number(x.abnormal_count || 0) <= 0) return false;
     if(flag === 'normal' && Number(x.abnormal_count || 0) > 0) return false;
+    if(flag === 'high' && (x.usefulness_level || '') !== 'high') return false;
+    if(flag === 'medium' && (x.usefulness_level || '') !== 'medium') return false;
+    if(flag === 'low' && (x.usefulness_level || '') !== 'low') return false;
     return true;
   });
   filtered.sort((a,b) => {
     return compareLabSummaryRows(a, b);
   });
   const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
+  const highUtility = filtered.filter(x => (x.usefulness_level || '') === 'high').length;
+  const lowUtility = filtered.filter(x => (x.usefulness_level || '') === 'low').length;
   const st = labSummaryDuplicateStats || {};
   const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
   const duplicateTitle = st.hidden
@@ -1242,6 +1308,8 @@ function renderLabSummary(){
     <div class="lab-statbar">
       <span class="lab-stat" title="Показатели"><b>${filtered.length}</b>/<span>${labSummaryRows.length}</span> показ.</span>
       <span class="lab-stat" title="Строки данных"><b>${Number(st.visible || 0)}</b>/<span>${Number(st.total || 0)}</span> строк</span>
+      <span class="lab-stat lab-stat-high" title="Строки с высокой полезностью для обзора"><b>${highUtility}</b> выс.</span>
+      <span class="lab-stat lab-stat-low" title="Строки с низкой полезностью: редкие, качественные или слабодинамичные"><b>${lowUtility}</b> низк.</span>
       <span class="lab-stat" title="${e(duplicateTitle)}"><b>${Number(st.hidden || 0)}</b> ${e(duplicateLabel)}</span>
       <span class="lab-stat lab-stat-alert" title="Показатели с отклонениями"><b>${abnormalSeries}</b> откл.</span>
     </div>
