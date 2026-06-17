@@ -339,8 +339,12 @@ CBC_SECTION_RE = re.compile(
 )
 
 CBC_CODE_RE = re.compile(
-    r"\b(?:WBC|RBC|HGB|HB|HCT|MCV|MCHC|MCH|RDW|PLT|MPV|PCT|PDW|NEU|LYM|MONO|EOS|BAS|IG|NRBC)\b",
+    r"\b(?:WBC|RBC|HGB|HB|HCT|MCV|MCHC|MCH|RDW|PLT|MPV|PCT|PDW|P-LCR|NEU|LYM|MONO|EOS|BAS|IG|NRBC)\b",
     flags=re.IGNORECASE,
+)
+
+CBC_LOOKALIKE_TRANSLATION = str.maketrans(
+    {"а": "a", "с": "c", "е": "e", "н": "h", "м": "m", "о": "o", "р": "p", "х": "x"}
 )
 
 CBC_ANALYTE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
@@ -356,6 +360,7 @@ CBC_ANALYTE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("mpv", "Средний объем тромбоцита", ("mpv", "средний объем тромбоцита")),
     ("plateletcrit", "Тромбокрит", ("тромбокрит", "pct")),
     ("pdw", "PDW", ("pdw", "индекс распределения тромбоцитов", "ширина распределения тромбоцитов")),
+    ("large_platelet_ratio", "P-LCR", ("p-lcr", "процент крупных тромбоцитов")),
     ("platelets", "Тромбоциты", ("plt", "тромбоцит")),
     ("neutrophils", "Нейтрофилы", ("neu", "нейтрофил")),
     ("lymphocytes", "Лимфоциты", ("lym", "лимфоцит")),
@@ -364,6 +369,9 @@ CBC_ANALYTE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("basophils", "Базофилы", ("bas", "базофил")),
     ("immature_granulocytes", "Незрелые гранулоциты", ("незрелые гранулоциты",)),
     ("normoblasts", "Нормобласты", ("нормобласт",)),
+    ("reticulocytes", "Ретикулоциты", ("ретикулоцит",)),
+    ("erythrocyte_fragments", "Фрагменты эритроцитов", ("фрагмент эритроцит",)),
+    ("atypical_mononuclear_cells", "Атипичные мононуклеары", ("атипичные мононуклеар",)),
     ("esr", "СОЭ", ("соэ",)),
 )
 
@@ -395,12 +403,13 @@ def infer_cbc_lab_normalization(
         return {}
 
     p = normalize_space(parameter).lower().replace("ё", "е")
+    p_lookup = p.translate(CBC_LOOKALIKE_TRANSLATION)
     unit_l = normalize_space(unit or "").lower()
 
     analyte_id: str | None = None
     label: str | None = None
     for candidate_id, candidate_label, tokens in CBC_ANALYTE_RULES:
-        if any(token in p for token in tokens):
+        if any(token in p or token in p_lookup for token in tokens):
             analyte_id = candidate_id
             label = candidate_label
             break
