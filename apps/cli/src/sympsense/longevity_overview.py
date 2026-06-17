@@ -49,6 +49,10 @@ def _load_ndjson(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _lab_result_is_display_primary(row: dict[str, Any]) -> bool:
+    return row.get("duplicate_role") != "duplicate" and row.get("cross_document_duplicate_role") != "duplicate"
+
+
 def _append_audit(path: Path, row: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -869,7 +873,8 @@ def build_longevity_overview(
     if not isinstance(registry, list):
         registry = []
     body_summary = _read_json(facts_dir / "body_snapshot_v1_summary.json")
-    labs = _load_ndjson(facts_dir / "lab_results_v1.ndjson")
+    lab_rows_all = _load_ndjson(facts_dir / "lab_results_v1.ndjson")
+    labs = [row for row in lab_rows_all if _lab_result_is_display_primary(row)]
     condition_rows = _load_ndjson(facts_dir / "condition_mentions_v1.ndjson")
     investigations = _load_ndjson(facts_dir / "investigation_events_v1.ndjson")
     current_state = _read_json(facts_dir / "current_state_v1.json")

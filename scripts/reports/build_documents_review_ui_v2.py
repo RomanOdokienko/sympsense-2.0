@@ -96,9 +96,35 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
 .card .num{font-size:22px;font-weight:700;color:var(--text)}
 .lab-table{width:100%;table-layout:fixed}
-.lab-table th{font-size:11px;color:var(--muted);background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
-.lab-table td{font-size:13px;color:var(--text)}
-.lab-table th,.lab-table td{word-break:break-word}
+.lab-table th{font-size:10px;color:#8f97b0;background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.lab-table td{font-size:13px;color:var(--text);line-height:1.25}
+.lab-table th,.lab-table td{word-break:normal;overflow-wrap:anywhere}
+.lab-name-cell{font-weight:400;color:#d8dce8}
+.lab-name-continuation{position:relative;min-height:18px}
+.lab-name-continuation::before{content:"";display:block;width:18px;height:1px;background:#475069;margin-top:9px;margin-left:2px;opacity:.75}
+.lab-kind{display:inline-flex;align-items:center;justify-content:center;min-width:34px;max-width:100%;box-sizing:border-box;padding:2px 7px;border-radius:999px;border:1px solid #3a4158;background:#202534;color:#aeb5ca;font-size:11px;font-weight:600;line-height:1.25;white-space:nowrap}
+.lab-value{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.lab-reference{display:inline-block;max-width:100%;font-size:12px;color:#b9bfd0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.lab-statbar{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:12px}
+.lab-stat{display:inline-flex;align-items:baseline;gap:4px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#202534;color:var(--muted);white-space:nowrap}
+.lab-stat b{font-size:12px;color:#d8dce8;font-weight:600}
+.lab-stat-alert{border-color:#573142;background:#281b27;color:#d6a2ad}
+.lab-stat-high{border-color:#21543c;background:#162a20;color:#93d1ab}
+.lab-stat-low{border-color:#42495f;background:#1a1f2c;color:#98a0b7}
+.lab-section{border-top:1px solid #384056;padding-top:12px;margin-top:14px}
+.lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#202534;border:1px solid #30374c;color:#d8dce8}
+.lab-section summary::-webkit-details-marker{display:none}
+.lab-section summary::before{content:"";width:7px;height:7px;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
+.lab-section[open] summary::before{transform:rotate(45deg)}
+.lab-section-title{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.lab-section-count{font-size:11px;color:var(--muted)}
+.lab-collapse-box{margin-top:8px;border:1px solid #30374c;border-radius:8px;background:#1b2030}
+.lab-collapse-box summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;color:#c8cede;cursor:pointer}
+.lab-collapse-box summary::-webkit-details-marker{display:none}
+.lab-collapse-box summary::before{content:"";width:7px;height:7px;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
+.lab-collapse-box[open] summary::before{transform:rotate(45deg)}
+.lab-collapse-label{font-size:12px;font-weight:600}
+.lab-collapse-meta{font-size:11px;color:var(--muted)}
 .analytics-list{margin-top:8px}
 .analytics-row{padding:6px 0;border-bottom:1px solid var(--line);color:var(--text)}
 .analytics-row:last-child{border-bottom:none}
@@ -108,7 +134,7 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .link-btn{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer}
 .link-btn:hover{border-color:#1e3a6a;color:var(--blue)}
 .queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
-.lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.lab-summary-controls{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(150px,.7fr) minmax(130px,.55fr) minmax(260px,1fr);gap:8px;margin-bottom:8px;align-items:stretch}
 .lab-trend-up{color:var(--red);font-weight:600}
 .lab-trend-down{color:var(--blue);font-weight:600}
 .lab-trend-flat{color:var(--muted);font-weight:600}
@@ -206,7 +232,14 @@ details.sec[open] summary{margin-bottom:6px}
           <option value="">Все показатели</option>
           <option value="abnormal">Есть отклонения</option>
           <option value="normal">Без отклонений</option>
+          <option value="high">Высокая полезность</option>
+          <option value="medium">Средняя полезность</option>
+          <option value="low">Низкая полезность</option>
         </select>
+        <label class="switch" style="padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">
+          <input id="labSummaryShowDuplicatesToggle" type="checkbox"/>
+          Показать дубли
+        </label>
         <div id="labSummaryStats" class="muted"></div>
       </div>
       <div id="labSummaryPanel" class="muted">Загрузка...</div>
@@ -286,8 +319,10 @@ let analyticsGraphCache = { nodes: [], edges: [] };
 let activeView = 'briefing';
 let advancedModeEnabled = false;
 let latestQualityPayload = null;
+let labSummaryFacts = [];
 let labSummaryRows = [];
 let labSummaryYears = [];
+let labSummaryDuplicateStats = { total: 0, visible: 0, hidden: 0 };
 
 const FALLBACK_API_BASE = 'http://127.0.0.1:8000';
 const API_BASE = location.protocol === 'file:' ? FALLBACK_API_BASE : window.location.origin;
@@ -313,6 +348,7 @@ const labSummaryPanelEl=document.getElementById('labSummaryPanel');
 const labSummaryStatsEl=document.getElementById('labSummaryStats');
 const labSummarySearchEl=document.getElementById('labSummarySearch');
 const labSummaryFlagFilterEl=document.getElementById('labSummaryFlagFilter');
+const labSummaryShowDuplicatesToggleEl=document.getElementById('labSummaryShowDuplicatesToggle');
 const labSummaryRefreshBtn=document.getElementById('labSummaryRefreshBtn');
 
 function e(s){
@@ -363,6 +399,7 @@ function setAdvancedMode(enabled){
     el.style.display = advancedModeEnabled ? '' : 'none';
   });
   renderQualityLine();
+  if(labSummaryFacts.length) rebuildLabSummaryFromFacts();
   if(!advancedModeEnabled && (activeView === 'review' || activeView === 'analytics')){
     setActiveView('briefing');
   }
@@ -640,20 +677,154 @@ async function loadAllLabFacts(){
   return all;
 }
 
+function labDuplicateHiddenByDefault(row){
+  return row?.duplicate_role === 'duplicate' || row?.cross_document_duplicate_role === 'duplicate';
+}
+
+function labDuplicateClusterKey(row){
+  const duplicateRole = (row?.duplicate_role || '').toString();
+  const crossRole = (row?.cross_document_duplicate_role || '').toString();
+  const canCollapseIntra = duplicateRole === 'primary' || duplicateRole === 'duplicate';
+  const canCollapseCross = crossRole === 'primary' || crossRole === 'duplicate';
+  const intra = canCollapseIntra ? (row?.duplicate_group_id || row?.duplicate_of_fact_id || '').toString().trim() : '';
+  if(intra) return `intra::${intra}`;
+  const cross = canCollapseCross ? (row?.cross_document_duplicate_group_id || row?.cross_document_duplicate_of_fact_id || '').toString().trim() : '';
+  if(cross) return `cross::${cross}`;
+  return (row?.fact_id || '').toString().trim();
+}
+
+function labDisplayRows(labFacts, includeDuplicates){
+  if(includeDuplicates) return labFacts || [];
+  const groups = new Map();
+  for(const row of (labFacts || [])){
+    const key = labDuplicateClusterKey(row);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const out = [];
+  for(const cluster of groups.values()){
+    const primary = cluster.find(x => x?.duplicate_role === 'primary' || x?.cross_document_duplicate_role === 'primary');
+    const visible = cluster.find(x => !labDuplicateHiddenByDefault(x));
+    const chosen = primary || visible || cluster[0];
+    if(!chosen) continue;
+    const duplicateSources = cluster.filter(x => labDuplicateHiddenByDefault(x));
+    out.push({
+      ...chosen,
+      display_source_count: cluster.length,
+      display_duplicate_source_count: duplicateSources.length,
+      display_raw_labels: [...new Set(cluster.map(x => (x?.analyte_name || '').toString().trim()).filter(Boolean))],
+      display_source_fact_ids: cluster.map(x => (x?.fact_id || '').toString().trim()).filter(Boolean),
+    });
+  }
+  return out;
+}
+
+function labMeasurementSuffix(row){
+  const kind = (row?.measurement_kind || '').toString();
+  if(kind === 'absolute') return ', абс.';
+  if(kind === 'percent') return ', %';
+  if(kind === 'count') return ', количество';
+  return '';
+}
+
+function labBaseDisplayName(row){
+  const label = (row?.normalized_label || '').toString().trim();
+  if(label) return label;
+  return (row?.analyte_name || '').toString().trim();
+}
+
+function labMeasurementLabel(row){
+  const kind = (row?.measurement_kind || '').toString();
+  const method = (row?.method || '').toString();
+  let label = 'знач.';
+  if(kind === 'absolute') label = 'абс.';
+  if(kind === 'percent') label = '%';
+  if(kind === 'count') label = 'кол-во';
+  if(method === 'manual_microscopy') return `микроскопия, ${label}`;
+  return label;
+}
+
+function labMeasurementRank(label){
+  const value = (label || '').toString();
+  if(value === 'абс.' || value === 'кол-во') return 1;
+  if(value === '%') return 2;
+  if(value.startsWith('микроскопия')) return 3;
+  return 9;
+}
+
+function labDisplayName(row){
+  const base = labBaseDisplayName(row);
+  if((row?.normalized_label || '').toString().trim()) return `${base}${labMeasurementSuffix(row)}`;
+  return base;
+}
+
+function labUnitFamily(unit){
+  const value = (unit || '').toString().trim().toLowerCase().replaceAll('x10^', '10*').replaceAll('10^', '10*');
+  if(value.includes('%')) return '%';
+  if(value.includes('10*9') || value.includes('тыс/мкл')) return '10*9/л';
+  if(value.includes('10*12') || value.includes('млн/мкл')) return '10*12/л';
+  return value;
+}
+
+function labSummaryGroupKey(row, displayName){
+  const analyteId = (row?.analyte_id || '').toString().trim();
+  if(analyteId){
+    return [
+      row?.specimen || 'unknown_specimen',
+      analyteId,
+      row?.measurement_kind || 'value',
+      row?.method || 'unknown_method',
+      labUnitFamily(row?.unit || ''),
+    ].join('::').toLowerCase();
+  }
+  return (displayName || '').toLowerCase();
+}
+
 function buildLabSummaryRows(labFacts){
   const groups = new Map();
   const yearsSet = new Set();
+  const includeDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const displayRows = labDisplayRows(labFacts, includeDuplicates);
+  const duplicateStats = {
+    total: (labFacts || []).length,
+    visible: displayRows.length,
+    hidden: 0,
+    intra_document: 0,
+    cross_document: 0,
+  };
   for(const row of (labFacts || [])){
-    const rawName = (row.analyte_name || '').toString().trim();
+    const isHiddenDuplicate = labDuplicateHiddenByDefault(row);
+    if(isHiddenDuplicate){
+      duplicateStats.hidden += 1;
+      if(row?.duplicate_role === 'duplicate') duplicateStats.intra_document += 1;
+      if(row?.cross_document_duplicate_role === 'duplicate') duplicateStats.cross_document += 1;
+    }
+  }
+  for(const row of displayRows){
+    if(!advancedModeEnabled && row?.method === 'manual_microscopy') continue;
+    const rawName = labDisplayName(row);
     if(!rawName) continue;
     const dateRaw = (row.event_date || '').toString().trim();
     const year = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateRaw) ? dateRaw.slice(0, 4) : '';
     if(year) yearsSet.add(year);
-    const key = rawName.toLowerCase();
+    const key = labSummaryGroupKey(row, rawName);
     if(!groups.has(key)){
-      groups.set(key, { analyte_name: rawName, rows: [] });
+      const baseName = labBaseDisplayName(row);
+      groups.set(key, {
+        analyte_name: rawName,
+        analyte_base_name: baseName,
+        measurement_label: labMeasurementLabel(row),
+        classification_group: classifyLabGroup(row, baseName),
+        clinical_sort_rank: labClinicalSortRank(row, baseName),
+        rows: [],
+      });
     }
-    groups.get(key).rows.push(row);
+    const currentGroup = groups.get(key);
+    currentGroup.clinical_sort_rank = Math.min(
+      Number(currentGroup.clinical_sort_rank || 9000),
+      labClinicalSortRank(row, currentGroup.analyte_base_name || rawName),
+    );
+    currentGroup.rows.push(row);
   }
   const years = [...yearsSet].sort((a,b)=>a.localeCompare(b));
   const out = [];
@@ -666,6 +837,11 @@ function buildLabSummaryRows(labFacts){
         abnormal: !!x.abnormal_flag,
         doc_id: (x.doc_id || '').toString(),
         reference: (x.reference_range_text || '').toString(),
+        duplicate_role: (x.duplicate_role || '').toString(),
+        cross_document_duplicate_role: (x.cross_document_duplicate_role || '').toString(),
+        source_count: Number(x.display_source_count || 1),
+        duplicate_source_count: Number(x.display_duplicate_source_count || 0),
+        raw_labels: x.display_raw_labels || [],
       }))
       .filter(x => x.date)
       .sort((a,b) => a.date.localeCompare(b.date));
@@ -683,20 +859,36 @@ function buildLabSummaryRows(labFacts){
     const latestPoint = points[points.length - 1];
     const latestReference = (latestPoint?.reference || '').toString().trim();
     const latestDocId = (latestPoint?.doc_id || '').toString().trim();
+    const usefulness = labUsefulnessMeta({
+      analyte_name: g.analyte_name,
+      analyte_base_name: g.analyte_base_name || g.analyte_name,
+      classification_group: g.classification_group || 'Прочее',
+      analyte_id: g.rows.find(x => (x?.analyte_id || '').toString().trim())?.analyte_id || '',
+      abnormal_count: abnormalCount,
+      by_year: byYear,
+    }, years);
     out.push({
       analyte_name: g.analyte_name,
+      analyte_base_name: g.analyte_base_name || g.analyte_name,
+      measurement_label: g.measurement_label || 'значение',
+      classification_group: g.classification_group || 'Прочее',
+      clinical_sort_rank: Number(g.clinical_sort_rank || 9000),
       abnormal_count: abnormalCount,
+      usefulness_score: usefulness.score,
+      usefulness_level: usefulness.level,
+      usefulness_recent_present: usefulness.recent_present,
+      usefulness_informative_count: usefulness.informative_count,
+      usefulness_core_bonus: usefulness.core_bonus,
+      usefulness_has_only_uninformative: usefulness.has_only_uninformative,
       by_year: byYear,
       latest_reference: latestReference,
       latest_doc_id: latestDocId,
     });
   }
   out.sort((a,b) => {
-    const abnormalCmp = Number(b.abnormal_count || 0) - Number(a.abnormal_count || 0);
-    if(abnormalCmp !== 0) return abnormalCmp;
-    return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
+    return compareLabSummaryRows(a, b);
   });
-  return { rows: out, years: years };
+  return { rows: out, years: years, duplicate_stats: duplicateStats };
 }
 
 function isUninformativeLabValue(v){
@@ -723,49 +915,268 @@ function cleanReferenceText(ref){
 }
 
 function usefulnessScore(row, years){
+  return labUsefulnessMeta(row, years).score;
+}
+
+function labCoreMarkerBonus(row){
+  const group = (row?.classification_group || '').toString();
+  const analyteId = labNormText(row?.analyte_id || '');
+  const name = labNormText(row?.analyte_base_name || row?.analyte_name || '');
+  if(group === 'ОАК / гематология' && ['hemoglobin', 'rbc', 'hematocrit', 'wbc', 'neutrophils', 'lymphocytes', 'platelets', 'esr'].includes(analyteId)) return 18;
+  if(group === 'Биохимия' && (labTextHasAny(name, ['глюкоз', 'холестерин', 'лпнп', 'лпвп', 'триглицерид', 'креатинин', 'мочевина', 'аланинаминотрансфераза', 'аспартатаминотрансфераза', 'алт', 'аст', 'гамма-гт', 'ггт', 'билирубин']) || ['glucose', 'creatinine_egfr'].includes(analyteId))) return 18;
+  if(group === 'Обмен железа / витамины' && labTextHasAny(name, ['ферритин', 'железо', 'трансферрин', 'ожсс', 'лжсс', 'витамин d', '25(он) d', 'b12', 'в12', 'фолиевая кислота'])) return 16;
+  if(group === 'Гормоны' && labTextHasAny(name, ['ттг', 'тиреотроп', 'тестостерон', 'пролактин', 'эстрадиол', 'прогестерон', 'кортизол'])) return 14;
+  if(group === 'Коагулограмма' && labTextHasAny(name, ['мно', 'inr', 'ачтв', 'протромбин', 'фибриноген'])) return 14;
+  if(group === 'Анализ мочи' && labTextHasAny(name, ['белок', 'лейкоцит', 'эритроцит', 'нитрит', 'глюкоз'])) return 12;
+  return 0;
+}
+
+function labUsefulnessMeta(row, years){
   const sortedYears = [...(years || [])].sort((a,b)=>a.localeCompare(b));
   const recentYears = sortedYears.slice(-3);
   const points = Object.values(row.by_year || {});
   const recentPresent = recentYears.filter(y => !!(row.by_year || {})[y]).length;
   const informativeCount = points.filter(p => !isUninformativeLabValue((p || {}).value_text || '')).length;
   const hasOnlyUninformative = points.length > 0 && informativeCount === 0;
+  const abnormalCount = Number(row.abnormal_count || 0);
+  const coreBonus = labCoreMarkerBonus(row);
   let score = 0;
   score += recentPresent * 30;
   score += informativeCount * 6;
-  score += Number(row.abnormal_count || 0) * 3;
+  score += abnormalCount * 3;
+  score += coreBonus;
   if(recentPresent === 0) score -= 220;
   if(hasOnlyUninformative) score -= 140;
-  return score;
+  let level = 'low';
+  if(
+    abnormalCount > 0 ||
+    (coreBonus >= 14 && recentPresent >= 1) ||
+    (recentPresent >= 2 && informativeCount >= 2) ||
+    score >= 78
+  ){
+    level = 'high';
+  } else if(
+    score >= 28 ||
+    informativeCount >= 2 ||
+    (coreBonus > 0 && informativeCount >= 1)
+  ){
+    level = 'medium';
+  }
+  return {
+    score,
+    level,
+    recent_present: recentPresent,
+    informative_count: informativeCount,
+    has_only_uninformative: hasOnlyUninformative,
+    core_bonus: coreBonus,
+  };
+}
+
+const LAB_GROUP_ORDER = [
+  'ОАК / гематология',
+  'Биохимия',
+  'Обмен железа / витамины',
+  'Гормоны',
+  'Коагулограмма',
+  'Анализ мочи',
+  'Инфекции / серология / ПЦР',
+  'Цитология / патология',
+  'Группа крови',
+  'Прочее',
+];
+
+const LAB_GROUP_RULES = [
+  {
+    label: 'Анализ мочи',
+    section: ['мочи', 'моча'],
+    terms: ['удельная плотность', 'относительная плотность', 'цвет', 'прозрачн', 'нитрит', 'уробилиноген', 'кетон', 'эстераза лейкоцитов', 'эпителий', 'слизь', 'бактерии', 'ph'],
+  },
+  {
+    label: 'Цитология / патология',
+    section: ['цитолог', 'pap', 'гистолог', 'патологоанатом'],
+    terms: ['bethesda', 'папаниколау', 'цитограмм', 'адекватность цитологического образца', 'количество клеток в образце', 'клетки зоны трансформации', 'качество материала', 'макроскопическое описание', 'микроскопическое описание', 'гистологическое заключение', 'патологоанатомическое заключение', 'цитологическое заключение', 'ора'],
+  },
+  {
+    label: 'Коагулограмма',
+    section: ['коагул'],
+    terms: ['ачтв', 'мно', 'inr', 'протромбин', 'тромбиновое время', 'фибриноген', 'пв'],
+  },
+  {
+    label: 'Группа крови',
+    terms: ['группа крови', 'резус', 'rh'],
+  },
+  {
+    label: 'Инфекции / серология / ПЦР',
+    section: ['серолог', 'инфекц', 'пцр'],
+    terms: ['днк ', 'рнк ', 'пцр', 'hbsag', 'anti-hcv', 'анти-hcv', 'вич', 'hiv', 'сифилис', 'treponema', 'бледной трепонеме', 'cmv', 'цитомегаловирус', 'cytomegalovirus', 'epstein', 'ebv', 'sars', 'hpv', 'papilloma', 'герпес', 'helicobacter', 'h. pylori', 'candida', 'mycoplasma', 'ureaplasma', 'chlamydia', 'gonorrhoeae', 'trichomonas', 'gardnerella', 'яйца гельминтов'],
+  },
+  {
+    label: 'Гормоны',
+    terms: ['ттг', 'тестостерон', 'пролактин', 'фсг', 'лютеиниз', 'дгэа', 'дгэа-с', 'андроген', 'андростендион', 'кортизол', 'прогестерон', '17-oh', '17-он', 'эстрадиол', 'гспг', 'гормон'],
+  },
+  {
+    label: 'Обмен железа / витамины',
+    terms: ['ферритин', 'железо', 'трансферрин', 'железосвязывающая', 'ожсс', 'лжсс', 'насыщения трансферрина', 'витамин', 'фолиевая кислота', 'b12', 'в12', '25(он) d'],
+  },
+  {
+    label: 'ОАК / гематология',
+    analyteIds: ['wbc', 'rbc', 'hemoglobin', 'hematocrit', 'mcv', 'mch', 'mchc', 'rdw_sd', 'rdw_cv', 'platelets', 'mpv', 'plateletcrit', 'pdw', 'large_platelet_ratio', 'neutrophils', 'lymphocytes', 'monocytes', 'eosinophils', 'basophils', 'immature_granulocytes', 'normoblasts', 'reticulocytes', 'erythrocyte_fragments', 'atypical_mononuclear_cells', 'esr'],
+    section: ['клинический анализ крови', 'общий анализ крови', 'cbc'],
+    terms: ['лейкоц', 'эритроц', 'гемоглоб', 'гематокрит', 'тромбоц', 'тромбокрит', 'нейтроф', 'лимфоц', 'моноц', 'эозиноф', 'базоф', 'соэ', 'нормобласт', 'ретикулоцит', 'фрагмент эритроцит', 'атипичные мононуклеар', 'wbc', 'rbc', 'hgb', 'hct', 'mcv', 'mch', 'mchc', 'rdw', 'plt', 'mpv', 'pdw', 'p-lcr'],
+  },
+  {
+    label: 'Биохимия',
+    section: ['биохим'],
+    terms: ['аланинаминотрансфераза', 'аспартатаминотрансфераза', 'алат', 'асат', 'алт', 'аст', 'гамма-гт', 'ггт', 'билирубин', 'глюкоз', 'креатинин', 'мочев', 'холестерин', 'лпнп', 'лпвп', 'триглицерид', 'общий белок', 'альбумин', 'калий', 'натрий', 'хлор', 'кальций', 'магний'],
+  },
+];
+
+const LAB_CLINICAL_ORDER_RULES = [
+  {
+    group: 'ОАК / гематология',
+    ranks: [
+      { rank: 100, analyteIds: ['immature_granulocytes', 'normoblasts', 'reticulocytes', 'erythrocyte_fragments', 'atypical_mononuclear_cells'], terms: ['незрелые гранулоциты', 'нормобласт', 'ретикулоцит', 'атипичные мононуклеар', 'фрагмент'] },
+      { rank: 10, analyteIds: ['hemoglobin'], terms: ['гемоглобин', 'hgb', 'hb'] },
+      { rank: 20, analyteIds: ['rbc', 'hematocrit'], terms: ['эритроцит', 'гематокрит', 'rbc', 'hct'] },
+      { rank: 30, analyteIds: ['mcv', 'mch', 'mchc', 'rdw_sd', 'rdw_cv'], terms: ['mcv', 'mch', 'mchc', 'rdw', 'средний объем эритроцита', 'распределения эритроцит'] },
+      { rank: 40, analyteIds: ['wbc'], terms: ['лейкоцит', 'wbc'] },
+      { rank: 50, analyteIds: ['neutrophils'], terms: ['нейтрофил'] },
+      { rank: 60, analyteIds: ['lymphocytes'], terms: ['лимфоцит'] },
+      { rank: 70, analyteIds: ['monocytes'], terms: ['моноцит'] },
+      { rank: 80, analyteIds: ['eosinophils'], terms: ['эозинофил'] },
+      { rank: 90, analyteIds: ['basophils'], terms: ['базофил'] },
+      { rank: 110, analyteIds: ['platelets', 'mpv', 'plateletcrit', 'pdw', 'large_platelet_ratio'], terms: ['тромбоцит', 'тромбокрит', 'mpv', 'pdw', 'p-lcr'] },
+      { rank: 120, analyteIds: ['esr'], terms: ['соэ', 'westergren', 'вестергрен'] },
+    ],
+  },
+  {
+    group: 'Биохимия',
+    ranks: [
+      { rank: 10, terms: ['глюкоз', 'гликирован', 'hba1c', 'инсулин'] },
+      { rank: 20, terms: ['холестерин', 'лпнп', 'лпвп', 'триглицерид', 'ldl', 'hdl', 'аполипопротеин', 'липопротеин'] },
+      { rank: 30, terms: ['аланинаминотрансфераза', 'аспартатаминотрансфераза', 'алат', 'асат', 'алт', 'аст', 'гамма-гт', 'ггт', 'билирубин', 'щелочная фосфатаза'] },
+      { rank: 40, terms: ['креатинин', 'мочев', 'скф', 'egfr', 'мочевая кислота'] },
+      { rank: 50, terms: ['общий белок', 'альбумин', 'глобулин'] },
+      { rank: 60, terms: ['натрий', 'калий', 'хлор', 'кальций', 'магний', 'фосфор'] },
+      { rank: 70, terms: ['с-реактив', 'срб', 'crp', 'гомоцистеин'] },
+    ],
+  },
+  {
+    group: 'Обмен железа / витамины',
+    ranks: [
+      { rank: 10, terms: ['ферритин'] },
+      { rank: 20, terms: ['железо'] },
+      { rank: 30, terms: ['трансферрин', 'железосвязывающая', 'ожсс', 'лжсс', 'насыщения трансферрина'] },
+      { rank: 40, terms: ['витамин d', '25(он) d', '25-oh', '25 oh'] },
+      { rank: 50, terms: ['b12', 'в12', 'фолиевая кислота', 'фолат'] },
+    ],
+  },
+  {
+    group: 'Гормоны',
+    ranks: [
+      { rank: 10, terms: ['ттг', 'тиреотроп'] },
+      { rank: 20, terms: ['т4', 'трийодтиронин', 'т3'] },
+      { rank: 30, terms: ['пролактин'] },
+      { rank: 40, terms: ['фсг', 'лютеиниз', 'лг'] },
+      { rank: 50, terms: ['эстрадиол', 'прогестерон', '17-oh', '17-он'] },
+      { rank: 60, terms: ['тестостерон', 'гспг', 'андроген', 'дгэа', 'андростендион'] },
+      { rank: 70, terms: ['кортизол'] },
+    ],
+  },
+  {
+    group: 'Коагулограмма',
+    ranks: [
+      { rank: 10, terms: ['протромбин', 'пв'] },
+      { rank: 20, terms: ['мно', 'inr'] },
+      { rank: 30, terms: ['ачтв'] },
+      { rank: 40, terms: ['тромбиновое время'] },
+      { rank: 50, terms: ['фибриноген'] },
+    ],
+  },
+  {
+    group: 'Анализ мочи',
+    ranks: [
+      { rank: 10, terms: ['цвет', 'прозрачн', 'удельная плотность', 'относительная плотность', 'ph'] },
+      { rank: 20, terms: ['белок', 'глюкоз', 'кетон', 'билирубин', 'уробилиноген'] },
+      { rank: 30, terms: ['нитрит', 'эстераза лейкоцитов'] },
+      { rank: 40, terms: ['лейкоцит', 'эритроцит', 'эпителий', 'цилиндр'] },
+      { rank: 50, terms: ['бактерии', 'слизь', 'кристалл', 'соль'] },
+    ],
+  },
+];
+
+function labNormText(value){
+  return (value || '').toString().toLowerCase().replaceAll('ё', 'е').replace(/\\s+/g, ' ').trim();
+}
+
+function labTextHasAny(text, terms){
+  return (terms || []).some(term => text.includes(labNormText(term)));
+}
+
+function classifyLabGroup(row, displayName){
+  const analyteId = labNormText(row?.analyte_id || '');
+  const section = labNormText(row?.section_name || '');
+  const name = labNormText(displayName || row?.normalized_label || row?.analyte_name || '');
+  const rawName = labNormText(row?.analyte_name || '');
+  const haystack = `${section} ${name} ${rawName}`;
+  for(const rule of LAB_GROUP_RULES){
+    if((rule.analyteIds || []).includes(analyteId)) return rule.label;
+    if(labTextHasAny(section, rule.section || [])) return rule.label;
+    if(labTextHasAny(haystack, rule.terms || [])) return rule.label;
+  }
+  return 'Прочее';
+}
+
+function labClinicalSortRank(row, displayName){
+  const group = classifyLabGroup(row, displayName);
+  const analyteId = labNormText(row?.analyte_id || '');
+  const name = labNormText(displayName || row?.normalized_label || row?.analyte_name || '');
+  const rawName = labNormText(row?.analyte_name || '');
+  const haystack = `${name} ${rawName}`;
+  const groupRules = LAB_CLINICAL_ORDER_RULES.find(x => x.group === group);
+  if(!groupRules) return 9000;
+  for(const rule of groupRules.ranks || []){
+    if((rule.analyteIds || []).includes(analyteId)) return rule.rank;
+    if(analyteId) continue;
+    if(labTextHasAny(haystack, rule.terms || [])) return rule.rank;
+  }
+  return 9000;
+}
+
+function labSummaryClinicalSortRank(row){
+  const stored = Number(row?.clinical_sort_rank);
+  if(Number.isFinite(stored) && stored < 9000) return stored;
+  return labClinicalSortRank(
+    {
+      analyte_name: row?.analyte_name || '',
+      normalized_label: row?.analyte_base_name || '',
+      section_name: row?.classification_group || '',
+    },
+    row?.analyte_base_name || row?.analyte_name || '',
+  );
+}
+
+function compareLabSummaryRows(a, b){
+  const clinicalCmp = labSummaryClinicalSortRank(a) - labSummaryClinicalSortRank(b);
+  if(clinicalCmp !== 0) return clinicalCmp;
+  const baseCmp = (a.analyte_base_name || a.analyte_name || '').localeCompare((b.analyte_base_name || b.analyte_name || ''), 'ru');
+  if(baseCmp !== 0) return baseCmp;
+  const rankCmp = labMeasurementRank(a.measurement_label) - labMeasurementRank(b.measurement_label);
+  if(rankCmp !== 0) return rankCmp;
+  const aAbn = Number(a.abnormal_count || 0) > 0 ? 1 : 0;
+  const bAbn = Number(b.abnormal_count || 0) > 0 ? 1 : 0;
+  if(bAbn !== aAbn) return bAbn - aAbn;
+  const sa = Number(a.usefulness_score ?? usefulnessScore(a, labSummaryYears));
+  const sb = Number(b.usefulness_score ?? usefulnessScore(b, labSummaryYears));
+  if(sb !== sa) return sb - sa;
+  const aAbnCount = Number(a.abnormal_count || 0);
+  const bAbnCount = Number(b.abnormal_count || 0);
+  if(bAbnCount !== aAbnCount) return bAbnCount - aAbnCount;
+  return (a.measurement_label || '').localeCompare((b.measurement_label || ''), 'ru');
 }
 
 function detectLabGroup(name){
-  const n = (name || '').toLowerCase();
-  if(!n) return 'Прочее';
-  if(
-    n.includes('ттг') || n.includes('тестостерон') || n.includes('пролактин') || n.includes('фсг') ||
-    n.includes('лютеиниз') || n.includes('дгэа') || n.includes('андроген') || n.includes('гормон')
-  ) return 'Гормоны';
-  if(
-    n.includes('днк ') || n.includes('пцр') || n.includes('papilloma') || n.includes('candida') ||
-    n.includes('mycoplasma') || n.includes('ureaplasma') || n.includes('chlamydia') || n.includes('gonorrhoeae') ||
-    n.includes('treponema') || n.includes('trichomonas') || n.includes('gardnerella') || n.includes('cmv') ||
-    n.includes('герпес')
-  ) return 'ПЦР / инфекции';
-  if(
-    n.includes('лейкоц') || n.includes('эритроц') || n.includes('гемоглоб') || n.includes('тромбоц') ||
-    n.includes('нейтроф') || n.includes('лимфоц') || n.includes('моноц') || n.includes('эозиноф') ||
-    n.includes('базоф') || n.includes('соэ') || n.includes('wbc') || n.includes('rbc') || n.includes('plt') ||
-    n.includes('mcv') || n.includes('mch') || n.includes('mchc') || n.includes('rdw')
-  ) return 'Общий анализ крови';
-  if(
-    n.includes('мочев') || n.includes('креатинин') || n.includes('холестерин') || n.includes('лпнп') ||
-    n.includes('лпвп') || n.includes('триглицерид') || n.includes('глюкоз') || n.includes('билирубин')
-  ) return 'Биохимия';
-  if(
-    n.includes('удельная плотность') || n.includes('белок') || n.includes('кетон') || n.includes('нитрит') ||
-    n.includes('прозрачн') || n.includes('цвет мочи')
-  ) return 'Анализ мочи';
-  return 'Прочее';
+  return classifyLabGroup({ analyte_name: name }, name);
 }
 
 function rowIsNonDetectedOrMissing(row){
@@ -774,23 +1185,40 @@ function rowIsNonDetectedOrMissing(row){
   return points.every(p => isUninformativeLabValue((p || {}).value_text || ''));
 }
 
+function russianPlural(count, one, few, many){
+  const n = Math.abs(Number(count) || 0);
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if(mod10 === 1 && mod100 !== 11) return one;
+  if(mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) return few;
+  return many;
+}
+
 function renderLabSummaryTableMarkup(items){
   const yearCount = Math.max((labSummaryYears || []).length, 1);
-  const yearWidth = (36 / yearCount).toFixed(3);
+  const yearWidth = (34 / yearCount).toFixed(3);
   const yearHeaders = (labSummaryYears || []).map(y => `<th>${e(y)}</th>`).join('');
   const yearCols = (labSummaryYears || []).map(() => `<col style="width:${yearWidth}%">`).join('');
+  let prevBaseName = '';
   const rowsHtml = items.map(x => {
     const yearCells = (labSummaryYears || []).map(y => {
       const point = (x.by_year || {})[y];
       if(!point) return '<td>—</td>';
       const cls = point.abnormal ? 'lab-value-alert' : 'lab-value-ok';
-      return `<td><span class="${cls}">${e(point.value_text || '—')}</span></td>`;
+      const duplicateMark = (point.duplicate_role === 'duplicate' || point.cross_document_duplicate_role === 'duplicate')
+        ? '<div class="k">дубль</div>'
+        : '';
+      return `<td><span class="lab-value ${cls}" title="${e(point.value_text || '—')}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
     }).join('');
+    const baseName = x.analyte_base_name || x.analyte_name || '';
+    const showBaseName = baseName !== prevBaseName;
+    prevBaseName = baseName;
     return `
       <tr>
-        <td>${e(x.analyte_name)}</td>
+        <td class="${showBaseName ? 'lab-name-cell' : 'lab-name-continuation'}">${showBaseName ? e(baseName) : ''}</td>
+        <td><span class="lab-kind">${e(x.measurement_label || 'знач.')}</span></td>
         ${yearCells}
-        <td>${e(cleanReferenceText(x.latest_reference || '') || '—')}</td>
+        <td><span class="lab-reference" title="${e(cleanReferenceText(x.latest_reference || '') || '—')}">${e(cleanReferenceText(x.latest_reference || '') || '—')}</span></td>
         <td>${x.latest_doc_id ? `<button class="link-btn" onclick="openDoc('${e(x.latest_doc_id)}')">к документу</button>` : '—'}</td>
       </tr>
     `;
@@ -798,14 +1226,16 @@ function renderLabSummaryTableMarkup(items){
   return `
     <table class="lab-table">
       <colgroup>
-        <col style="width:32%">
+        <col style="width:21%">
+        <col style="width:7%">
         ${yearCols}
-        <col style="width:22%">
+        <col style="width:19%">
         <col style="width:10%">
       </colgroup>
       <thead>
         <tr>
           <th>Показатель</th>
+          <th>Вид</th>
           ${yearHeaders}
           <th>Референс</th>
           <th>Документ</th>
@@ -816,12 +1246,13 @@ function renderLabSummaryTableMarkup(items){
   `;
 }
 
-function renderLabSummaryTable(items){
+function renderLabSummaryTable(items, options = {}){
   if(!labSummaryPanelEl) return;
   if(!items.length){
     labSummaryPanelEl.innerHTML = '<div class="muted">Нет показателей под текущие фильтры.</div>';
     return;
   }
+  const collapseLowUtility = !!options.collapseLowUtility;
 
   const nonDetected = [];
   const grouped = new Map();
@@ -830,26 +1261,43 @@ function renderLabSummaryTable(items){
       nonDetected.push(row);
       continue;
     }
-    const g = detectLabGroup(row.analyte_name);
+    const g = row.classification_group || detectLabGroup(row.analyte_base_name || row.analyte_name);
     if(!grouped.has(g)) grouped.set(g, []);
     grouped.get(g).push(row);
   }
+  for(const rows of grouped.values()){
+    rows.sort(compareLabSummaryRows);
+  }
+  nonDetected.sort(compareLabSummaryRows);
 
-  const order = ['Гормоны','Общий анализ крови','Биохимия','Анализ мочи','ПЦР / инфекции','Прочее'];
+  const order = LAB_GROUP_ORDER;
   const parts = [];
   for(const g of order){
     const rows = grouped.get(g) || [];
     if(!rows.length) continue;
+    const visibleRows = collapseLowUtility ? rows.filter(row => (row.usefulness_level || '') !== 'low') : rows;
+    const collapsedRows = collapseLowUtility ? rows.filter(row => (row.usefulness_level || '') === 'low') : [];
+    const tableRows = visibleRows.length ? visibleRows : collapsedRows;
+    const collapsedBlock = collapsedRows.length && visibleRows.length ? `
+      <details class="lab-collapse-box">
+        <summary>
+          <span class="lab-collapse-label">Еще ${collapsedRows.length} ${russianPlural(collapsedRows.length, 'строка', 'строки', 'строк')}</span>
+          <span class="lab-collapse-meta">низкая полезность</span>
+        </summary>
+        <div style="padding:0 8px 8px">${renderLabSummaryTableMarkup(collapsedRows)}</div>
+      </details>
+    ` : '';
     parts.push(`
-      <details class="sec" open>
-        <summary><b>${e(g)}</b> (${rows.length})</summary>
-        <div style="margin-top:8px">${renderLabSummaryTableMarkup(rows)}</div>
+      <details class="lab-section" open>
+        <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${rows.length}</span></summary>
+        <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
+        ${collapsedBlock}
       </details>
     `);
   }
   parts.push(`
-    <details class="sec">
-      <summary><b>Не обнаружено / без информативной динамики</b> (${nonDetected.length})</summary>
+    <details class="lab-section">
+      <summary><span class="lab-section-title">Качественные / без динамики</span><span class="lab-section-count">${nonDetected.length}</span></summary>
       <div style="margin-top:8px">${nonDetected.length ? renderLabSummaryTableMarkup(nonDetected) : '<div class="muted">Нет строк в этой группе.</div>'}</div>
     </details>
   `);
@@ -861,36 +1309,60 @@ function renderLabSummary(){
   const query = (labSummarySearchEl?.value || '').toLowerCase().trim();
   const flag = (labSummaryFlagFilterEl?.value || '').trim();
   const filtered = labSummaryRows.filter(x => {
-    if(query && !(x.analyte_name || '').toLowerCase().includes(query)) return false;
+    const searchable = [
+      x.analyte_name || '',
+      x.analyte_base_name || '',
+      x.measurement_label || '',
+    ].join(' ').toLowerCase();
+    if(query && !searchable.includes(query)) return false;
     if(flag === 'abnormal' && Number(x.abnormal_count || 0) <= 0) return false;
     if(flag === 'normal' && Number(x.abnormal_count || 0) > 0) return false;
+    if(flag === 'high' && (x.usefulness_level || '') !== 'high') return false;
+    if(flag === 'medium' && (x.usefulness_level || '') !== 'medium') return false;
+    if(flag === 'low' && (x.usefulness_level || '') !== 'low') return false;
     return true;
   });
   filtered.sort((a,b) => {
-    const aAbn = Number(a.abnormal_count || 0) > 0 ? 1 : 0;
-    const bAbn = Number(b.abnormal_count || 0) > 0 ? 1 : 0;
-    if(bAbn !== aAbn) return bAbn - aAbn;
-    const sa = usefulnessScore(a, labSummaryYears);
-    const sb = usefulnessScore(b, labSummaryYears);
-    if(sb !== sa) return sb - sa;
-    const aAbnCount = Number(a.abnormal_count || 0);
-    const bAbnCount = Number(b.abnormal_count || 0);
-    if(bAbnCount !== aAbnCount) return bAbnCount - aAbnCount;
-    return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
+    return compareLabSummaryRows(a, b);
   });
   const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
-  labSummaryStatsEl.innerHTML = `Показателей: <b>${filtered.length}</b> из <b>${labSummaryRows.length}</b> | с отклонениями: <b>${abnormalSeries}</b>`;
-  renderLabSummaryTable(filtered);
+  const highUtility = filtered.filter(x => (x.usefulness_level || '') === 'high').length;
+  const lowUtility = filtered.filter(x => (x.usefulness_level || '') === 'low').length;
+  const collapseLowUtility = !query && flag !== 'low';
+  const collapsedLowUtility = collapseLowUtility ? lowUtility : 0;
+  const st = labSummaryDuplicateStats || {};
+  const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const duplicateTitle = st.hidden
+    ? `${showingDuplicates ? 'Показано' : 'Скрыто'} дублей: ${Number(st.hidden || 0)}; внутри документа: ${Number(st.intra_document || 0)}; между документами: ${Number(st.cross_document || 0)}`
+    : 'Дублей нет';
+  const duplicateLabel = showingDuplicates ? 'дубли показаны' : 'дубли скрыты';
+  labSummaryStatsEl.innerHTML = `
+    <div class="lab-statbar">
+      <span class="lab-stat" title="Показатели"><b>${filtered.length}</b>/<span>${labSummaryRows.length}</span> показ.</span>
+      <span class="lab-stat" title="Строки данных"><b>${Number(st.visible || 0)}</b>/<span>${Number(st.total || 0)}</span> строк</span>
+      <span class="lab-stat lab-stat-high" title="Строки с высокой полезностью для обзора"><b>${highUtility}</b> выс.</span>
+      <span class="lab-stat lab-stat-low" title="Строки с низкой полезностью: редкие, качественные или слабодинамичные"><b>${lowUtility}</b> низк.</span>
+      <span class="lab-stat" title="Низкополезные строки, свернутые по умолчанию"><b>${collapsedLowUtility}</b> сверн.</span>
+      <span class="lab-stat" title="${e(duplicateTitle)}"><b>${Number(st.hidden || 0)}</b> ${e(duplicateLabel)}</span>
+      <span class="lab-stat lab-stat-alert" title="Показатели с отклонениями"><b>${abnormalSeries}</b> откл.</span>
+    </div>
+  `;
+  renderLabSummaryTable(filtered, { collapseLowUtility });
+}
+
+function rebuildLabSummaryFromFacts(){
+  const built = buildLabSummaryRows(labSummaryFacts);
+  labSummaryRows = built.rows || [];
+  labSummaryYears = built.years || [];
+  labSummaryDuplicateStats = built.duplicate_stats || { total: 0, visible: 0, hidden: 0 };
+  renderLabSummary();
 }
 
 async function loadLabSummary(){
   if(!labSummaryPanelEl) return;
   labSummaryPanelEl.innerHTML = 'Загрузка...';
-  const labFacts = await loadAllLabFacts();
-  const built = buildLabSummaryRows(labFacts);
-  labSummaryRows = built.rows || [];
-  labSummaryYears = built.years || [];
-  renderLabSummary();
+  labSummaryFacts = await loadAllLabFacts();
+  rebuildLabSummaryFromFacts();
 }
 
 async function loadAnalyticsSnapshot(){
@@ -1465,6 +1937,7 @@ if(briefingRefreshBtn) briefingRefreshBtn.addEventListener('click', ()=>loadPati
 if(briefingBuildBtn) briefingBuildBtn.addEventListener('click', ()=>rebuildPatientBriefing());
 if(labSummarySearchEl) labSummarySearchEl.addEventListener('input', ()=>renderLabSummary());
 if(labSummaryFlagFilterEl) labSummaryFlagFilterEl.addEventListener('change', ()=>renderLabSummary());
+if(labSummaryShowDuplicatesToggleEl) labSummaryShowDuplicatesToggleEl.addEventListener('change', ()=>rebuildLabSummaryFromFacts());
 if(labSummaryRefreshBtn) labSummaryRefreshBtn.addEventListener('click', ()=>loadLabSummary());
 if(analyticsClusterSelectEl) analyticsClusterSelectEl.addEventListener('change', ()=>renderAnalyticsDrilldown(analyticsClusterSelectEl.value));
 if(advancedModeToggleEl) advancedModeToggleEl.addEventListener('change', ()=>setAdvancedMode(advancedModeToggleEl.checked));
@@ -1482,6 +1955,3 @@ reloadAll();
 
 if __name__ == "__main__":
     build()
-
-
-
