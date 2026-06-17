@@ -156,6 +156,10 @@ def load_ndjson(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def lab_result_is_display_primary(row: dict[str, Any]) -> bool:
+    return row.get("duplicate_role") != "duplicate" and row.get("cross_document_duplicate_role") != "duplicate"
+
+
 def save_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -705,10 +709,11 @@ def main() -> None:
     labs_all = load_ndjson(LAB_FACTS_PATH)
 
     clinical_rows = [x for x in clinical_all if str(x.get("doc_id") or "") in active_doc_ids]
-    labs_rows = [x for x in labs_all if str(x.get("doc_id") or "") in active_doc_ids]
+    labs_rows_all_active = [x for x in labs_all if str(x.get("doc_id") or "") in active_doc_ids]
+    labs_rows = [x for x in labs_rows_all_active if lab_result_is_display_primary(x)]
     dropped_orphan = {
         "clinical_findings": len(clinical_all) - len(clinical_rows),
-        "lab_results": len(labs_all) - len(labs_rows),
+        "lab_results": len(labs_all) - len(labs_rows_all_active),
     }
 
     clinical_by_doc: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -775,6 +780,7 @@ def main() -> None:
             "active_documents": len(active_doc_ids),
             "clinical_rows_used": len(clinical_rows),
             "lab_rows_used": len(labs_rows),
+            "lab_rows_hidden_duplicates": len(labs_rows_all_active) - len(labs_rows),
             "dropped_orphan_facts": dropped_orphan,
         },
         "outputs": {

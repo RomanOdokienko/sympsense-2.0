@@ -27,6 +27,10 @@ def _load_ndjson(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _lab_result_is_display_primary(row: dict[str, Any]) -> bool:
+    return row.get("duplicate_role") != "duplicate" and row.get("cross_document_duplicate_role") != "duplicate"
+
+
 def _append_audit(path: Path, row: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -745,7 +749,8 @@ def build_patient_briefing(
     body_summary = _load_json(data_root / "canonical/facts/body_snapshot_v1_summary.json")
     clusters = _load_ndjson(data_root / "canonical/facts/condition_clusters_v1.ndjson")
     investigations = _load_ndjson(data_root / "canonical/facts/investigation_events_v1.ndjson")
-    labs = _load_ndjson(data_root / "canonical/facts/lab_results_v1.ndjson")
+    labs_all = _load_ndjson(data_root / "canonical/facts/lab_results_v1.ndjson")
+    labs = [row for row in labs_all if _lab_result_is_display_primary(row)]
 
     quality_report_path = sorted(
         reports_dir.glob("quality_gates_v1_*.json"),
@@ -949,4 +954,3 @@ def build_patient_briefing(
         )
 
     return payload
-

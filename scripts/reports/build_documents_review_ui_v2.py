@@ -108,7 +108,7 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .link-btn{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer}
 .link-btn:hover{border-color:#1e3a6a;color:var(--blue)}
 .queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
-.lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 1fr;gap:8px;margin-bottom:8px}
+.lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr;gap:8px;margin-bottom:8px}
 .lab-trend-up{color:var(--red);font-weight:600}
 .lab-trend-down{color:var(--blue);font-weight:600}
 .lab-trend-flat{color:var(--muted);font-weight:600}
@@ -207,6 +207,10 @@ details.sec[open] summary{margin-bottom:6px}
           <option value="abnormal">Есть отклонения</option>
           <option value="normal">Без отклонений</option>
         </select>
+        <label class="switch" style="padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">
+          <input id="labSummaryShowDuplicatesToggle" type="checkbox"/>
+          Показать дубли
+        </label>
         <div id="labSummaryStats" class="muted"></div>
       </div>
       <div id="labSummaryPanel" class="muted">Загрузка...</div>
@@ -286,8 +290,10 @@ let analyticsGraphCache = { nodes: [], edges: [] };
 let activeView = 'briefing';
 let advancedModeEnabled = false;
 let latestQualityPayload = null;
+let labSummaryFacts = [];
 let labSummaryRows = [];
 let labSummaryYears = [];
+let labSummaryDuplicateStats = { total: 0, visible: 0, hidden: 0 };
 
 const FALLBACK_API_BASE = 'http://127.0.0.1:8000';
 const API_BASE = location.protocol === 'file:' ? FALLBACK_API_BASE : window.location.origin;
@@ -313,6 +319,7 @@ const labSummaryPanelEl=document.getElementById('labSummaryPanel');
 const labSummaryStatsEl=document.getElementById('labSummaryStats');
 const labSummarySearchEl=document.getElementById('labSummarySearch');
 const labSummaryFlagFilterEl=document.getElementById('labSummaryFlagFilter');
+const labSummaryShowDuplicatesToggleEl=document.getElementById('labSummaryShowDuplicatesToggle');
 const labSummaryRefreshBtn=document.getElementById('labSummaryRefreshBtn');
 
 function e(s){
@@ -640,16 +647,63 @@ async function loadAllLabFacts(){
   return all;
 }
 
+function labDuplicateHiddenByDefault(row){
+  return row?.duplicate_role === 'duplicate' || row?.cross_document_duplicate_role === 'duplicate';
+}
+
+function labMeasurementSuffix(row){
+  const kind = (row?.measurement_kind || '').toString();
+  if(kind === 'absolute') return ', абс.';
+  if(kind === 'percent') return ', %';
+  if(kind === 'count') return ', количество';
+  return '';
+}
+
+function labDisplayName(row){
+  const label = (row?.normalized_label || '').toString().trim();
+  if(label) return `${label}${labMeasurementSuffix(row)}`;
+  return (row?.analyte_name || '').toString().trim();
+}
+
+function labSummaryGroupKey(row, displayName){
+  const analyteId = (row?.analyte_id || '').toString().trim();
+  if(analyteId){
+    return [
+      row?.specimen || 'unknown_specimen',
+      analyteId,
+      row?.measurement_kind || 'value',
+      row?.unit || '',
+    ].join('::').toLowerCase();
+  }
+  return (displayName || '').toLowerCase();
+}
+
 function buildLabSummaryRows(labFacts){
   const groups = new Map();
   const yearsSet = new Set();
+  const includeDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const duplicateStats = {
+    total: (labFacts || []).length,
+    visible: 0,
+    hidden: 0,
+    intra_document: 0,
+    cross_document: 0,
+  };
   for(const row of (labFacts || [])){
-    const rawName = (row.analyte_name || '').toString().trim();
+    const isHiddenDuplicate = labDuplicateHiddenByDefault(row);
+    if(isHiddenDuplicate){
+      duplicateStats.hidden += 1;
+      if(row?.duplicate_role === 'duplicate') duplicateStats.intra_document += 1;
+      if(row?.cross_document_duplicate_role === 'duplicate') duplicateStats.cross_document += 1;
+      if(!includeDuplicates) continue;
+    }
+    duplicateStats.visible += 1;
+    const rawName = labDisplayName(row);
     if(!rawName) continue;
     const dateRaw = (row.event_date || '').toString().trim();
     const year = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateRaw) ? dateRaw.slice(0, 4) : '';
     if(year) yearsSet.add(year);
-    const key = rawName.toLowerCase();
+    const key = labSummaryGroupKey(row, rawName);
     if(!groups.has(key)){
       groups.set(key, { analyte_name: rawName, rows: [] });
     }
@@ -666,6 +720,8 @@ function buildLabSummaryRows(labFacts){
         abnormal: !!x.abnormal_flag,
         doc_id: (x.doc_id || '').toString(),
         reference: (x.reference_range_text || '').toString(),
+        duplicate_role: (x.duplicate_role || '').toString(),
+        cross_document_duplicate_role: (x.cross_document_duplicate_role || '').toString(),
       }))
       .filter(x => x.date)
       .sort((a,b) => a.date.localeCompare(b.date));
@@ -696,7 +752,7 @@ function buildLabSummaryRows(labFacts){
     if(abnormalCmp !== 0) return abnormalCmp;
     return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
   });
-  return { rows: out, years: years };
+  return { rows: out, years: years, duplicate_stats: duplicateStats };
 }
 
 function isUninformativeLabValue(v){
@@ -784,7 +840,10 @@ function renderLabSummaryTableMarkup(items){
       const point = (x.by_year || {})[y];
       if(!point) return '<td>—</td>';
       const cls = point.abnormal ? 'lab-value-alert' : 'lab-value-ok';
-      return `<td><span class="${cls}">${e(point.value_text || '—')}</span></td>`;
+      const duplicateMark = (point.duplicate_role === 'duplicate' || point.cross_document_duplicate_role === 'duplicate')
+        ? '<div class="k">дубль</div>'
+        : '';
+      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
     }).join('');
     return `
       <tr>
@@ -879,18 +938,28 @@ function renderLabSummary(){
     return (a.analyte_name || '').localeCompare((b.analyte_name || ''), 'ru');
   });
   const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
-  labSummaryStatsEl.innerHTML = `Показателей: <b>${filtered.length}</b> из <b>${labSummaryRows.length}</b> | с отклонениями: <b>${abnormalSeries}</b>`;
+  const st = labSummaryDuplicateStats || {};
+  const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const hiddenText = st.hidden
+    ? ` | дублей ${showingDuplicates ? 'показано' : 'скрыто'}: <b>${st.hidden}</b> (${Number(st.intra_document || 0)} в документе, ${Number(st.cross_document || 0)} между документами)`
+    : '';
+  labSummaryStatsEl.innerHTML = `Показателей: <b>${filtered.length}</b> из <b>${labSummaryRows.length}</b> | строк: <b>${Number(st.visible || 0)}</b> из <b>${Number(st.total || 0)}</b>${hiddenText} | с отклонениями: <b>${abnormalSeries}</b>`;
   renderLabSummaryTable(filtered);
+}
+
+function rebuildLabSummaryFromFacts(){
+  const built = buildLabSummaryRows(labSummaryFacts);
+  labSummaryRows = built.rows || [];
+  labSummaryYears = built.years || [];
+  labSummaryDuplicateStats = built.duplicate_stats || { total: 0, visible: 0, hidden: 0 };
+  renderLabSummary();
 }
 
 async function loadLabSummary(){
   if(!labSummaryPanelEl) return;
   labSummaryPanelEl.innerHTML = 'Загрузка...';
-  const labFacts = await loadAllLabFacts();
-  const built = buildLabSummaryRows(labFacts);
-  labSummaryRows = built.rows || [];
-  labSummaryYears = built.years || [];
-  renderLabSummary();
+  labSummaryFacts = await loadAllLabFacts();
+  rebuildLabSummaryFromFacts();
 }
 
 async function loadAnalyticsSnapshot(){
@@ -1465,6 +1534,7 @@ if(briefingRefreshBtn) briefingRefreshBtn.addEventListener('click', ()=>loadPati
 if(briefingBuildBtn) briefingBuildBtn.addEventListener('click', ()=>rebuildPatientBriefing());
 if(labSummarySearchEl) labSummarySearchEl.addEventListener('input', ()=>renderLabSummary());
 if(labSummaryFlagFilterEl) labSummaryFlagFilterEl.addEventListener('change', ()=>renderLabSummary());
+if(labSummaryShowDuplicatesToggleEl) labSummaryShowDuplicatesToggleEl.addEventListener('change', ()=>rebuildLabSummaryFromFacts());
 if(labSummaryRefreshBtn) labSummaryRefreshBtn.addEventListener('click', ()=>loadLabSummary());
 if(analyticsClusterSelectEl) analyticsClusterSelectEl.addEventListener('change', ()=>renderAnalyticsDrilldown(analyticsClusterSelectEl.value));
 if(advancedModeToggleEl) advancedModeToggleEl.addEventListener('change', ()=>setAdvancedMode(advancedModeToggleEl.checked));
@@ -1482,6 +1552,3 @@ reloadAll();
 
 if __name__ == "__main__":
     build()
-
-
-

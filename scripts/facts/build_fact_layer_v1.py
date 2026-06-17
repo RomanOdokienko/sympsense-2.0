@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime, timezone
@@ -138,6 +139,18 @@ def iso_from_ddmmyyyy(raw: str | None) -> str | None:
     except ValueError:
         return None
     return dt.date().isoformat()
+
+
+def iso_from_registry_date(raw: str | None) -> str | None:
+    value = normalize_space(str(raw or ""))
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(value, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 def clamp_confidence(value: float) -> float:
@@ -318,6 +331,343 @@ def normalize_lab_parameter_and_reference(parameter: str, reference: str) -> tup
         r = normalize_space(r)
 
     return p, r
+
+
+CBC_SECTION_RE = re.compile(
+    r"(?:клиническ\w*\s+анализ\w*\s+кров|общ\w*\s+анализ\w*\s+кров|cbc)",
+    flags=re.IGNORECASE,
+)
+
+CBC_CODE_RE = re.compile(
+    r"\b(?:WBC|RBC|HGB|HB|HCT|MCV|MCHC|MCH|RDW|PLT|MPV|PCT|PDW|NEU|LYM|MONO|EOS|BAS|IG|NRBC)\b",
+    flags=re.IGNORECASE,
+)
+
+CBC_ANALYTE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("wbc", "Лейкоциты", ("wbc", "лейкоцит")),
+    ("hemoglobin", "Гемоглобин", ("hgb", "гемоглобин")),
+    ("hematocrit", "Гематокрит", ("hct", "гематокрит")),
+    ("mcv", "Средний объем эритроцита", ("mcv", "средний объем эритроцита", "ср.объем эритроцита")),
+    ("mchc", "Средняя концентрация Hb в эритроците", ("mchc", "средняя концентрация", "ср. концентрация")),
+    ("mch", "Среднее содержание Hb в эритроците", ("mch", "среднее содержание", "ср. содержание")),
+    ("rdw_sd", "RDW-SD", ("rdw-sd",)),
+    ("rdw_cv", "RDW-CV", ("rdw-cv", "rdw")),
+    ("rbc", "Эритроциты", ("rbc", "эритроцит")),
+    ("mpv", "Средний объем тромбоцита", ("mpv", "средний объем тромбоцита")),
+    ("plateletcrit", "Тромбокрит", ("тромбокрит", "pct")),
+    ("pdw", "PDW", ("pdw", "индекс распределения тромбоцитов", "ширина распределения тромбоцитов")),
+    ("platelets", "Тромбоциты", ("plt", "тромбоцит")),
+    ("neutrophils", "Нейтрофилы", ("neu", "нейтрофил")),
+    ("lymphocytes", "Лимфоциты", ("lym", "лимфоцит")),
+    ("monocytes", "Моноциты", ("mono", "моноцит")),
+    ("eosinophils", "Эозинофилы", ("eos", "эозинофил")),
+    ("basophils", "Базофилы", ("bas", "базофил")),
+    ("immature_granulocytes", "Незрелые гранулоциты", ("незрелые гранулоциты",)),
+    ("normoblasts", "Нормобласты", ("нормобласт",)),
+    ("esr", "СОЭ", ("соэ",)),
+)
+
+CBC_DIFFERENTIAL_ANALYTES = {
+    "neutrophils",
+    "lymphocytes",
+    "monocytes",
+    "eosinophils",
+    "basophils",
+    "immature_granulocytes",
+    "normoblasts",
+}
+
+
+def is_cbc_context(parameter: str, section_name: str) -> bool:
+    return bool(CBC_SECTION_RE.search(section_name or "") or CBC_CODE_RE.search(parameter or ""))
+
+
+def infer_cbc_lab_normalization(parameter: str, section_name: str, unit: str | None) -> dict[str, str | None]:
+    """Return additive normalized lab fields for CBC rows without changing source names."""
+
+    if not is_cbc_context(parameter, section_name):
+        return {}
+
+    p = normalize_space(parameter).lower().replace("ё", "е")
+    unit_l = normalize_space(unit or "").lower()
+
+    analyte_id: str | None = None
+    label: str | None = None
+    for candidate_id, candidate_label, tokens in CBC_ANALYTE_RULES:
+        if any(token in p for token in tokens):
+            analyte_id = candidate_id
+            label = candidate_label
+            break
+
+    if not analyte_id:
+        return {}
+
+    method = "manual_microscopy" if re.search(r"микроскоп|палочкоядер|сегментоядер|сегм\.", p) else "analyzer"
+
+    measurement_kind = "value"
+    if analyte_id in CBC_DIFFERENTIAL_ANALYTES:
+        if "%" in p or "%" in unit_l:
+            measurement_kind = "percent"
+        elif "#" in p or "абс" in p or "абсолют" in p or "10*9" in unit_l or "x10^9" in unit_l or "тыс/мкл" in unit_l:
+            measurement_kind = "absolute"
+
+    if analyte_id in {"wbc", "rbc", "platelets"} and (
+        "10*9" in unit_l or "x10^9" in unit_l or "10^9" in unit_l or "10*12" in unit_l or "x10^12" in unit_l
+    ):
+        measurement_kind = "count"
+
+    return {
+        "analyte_id": analyte_id,
+        "measurement_kind": measurement_kind,
+        "method": method,
+        "specimen": "blood",
+        "normalized_label": label,
+    }
+
+
+LAB_DUP_VALUE_TOLERANCE_RELATIVE = 0.08
+
+
+def lab_duplicate_group_key(row: dict[str, Any], include_method: bool = True) -> tuple[str, ...] | None:
+    analyte_id = str(row.get("analyte_id") or "").strip()
+    measurement_kind = str(row.get("measurement_kind") or "").strip()
+    specimen = str(row.get("specimen") or "").strip()
+    if not analyte_id or not measurement_kind:
+        return None
+
+    key = [
+        str(row.get("doc_id") or ""),
+        specimen or "unknown_specimen",
+        analyte_id,
+        measurement_kind,
+    ]
+    if include_method:
+        key.append(str(row.get("method") or "unknown_method"))
+    return tuple(key)
+
+
+def lab_unit_family(unit: str | None) -> str:
+    value = normalize_space(unit or "").lower().replace("x10^", "10*").replace("10^", "10*")
+    if "%" in value:
+        return "%"
+    if "10*9" in value or "тыс/мкл" in value:
+        return "10*9/л"
+    if "10*12" in value or "млн/мкл" in value:
+        return "10*12/л"
+    return value
+
+
+def lab_clean_value_text(value: str | None) -> str:
+    return normalize_space(value or "").replace("↑", "").replace("↓", "").replace(",", ".").lower()
+
+
+def lab_normalize_analyte_name(name: str | None) -> str:
+    value = normalize_space(name or "").lower().replace("ё", "е")
+    value = re.sub(r"^\(?[a-z]{2,8}\s*[#%]?\)?\s*", "", value)
+    value = value.replace("микроскопия:", "")
+    value = re.sub(r"[(),]+", " ", value)
+    return normalize_space(value)
+
+
+def lab_canonical_key(row: dict[str, Any]) -> str:
+    analyte_id = normalize_space(str(row.get("analyte_id") or ""))
+    measurement_kind = normalize_space(str(row.get("measurement_kind") or ""))
+    specimen = normalize_space(str(row.get("specimen") or ""))
+    if analyte_id:
+        return "::".join([specimen or "unknown_specimen", analyte_id, measurement_kind or "value"])
+    return "::".join(["raw", lab_normalize_analyte_name(str(row.get("analyte_name") or ""))])
+
+
+def lab_values_close(left: dict[str, Any], right: dict[str, Any]) -> tuple[bool, str]:
+    if lab_unit_family(str(left.get("unit") or "")) != lab_unit_family(str(right.get("unit") or "")):
+        return False, "different_unit"
+
+    left_text = lab_clean_value_text(str(left.get("value_text") or ""))
+    right_text = lab_clean_value_text(str(right.get("value_text") or ""))
+    if left_text and left_text == right_text:
+        return True, "exact_text"
+
+    left_num = left.get("value_num")
+    right_num = right.get("value_num")
+    if not isinstance(left_num, (int, float)) or not isinstance(right_num, (int, float)):
+        return False, "not_numeric"
+
+    denom = max(abs(float(left_num)), abs(float(right_num)), 1e-9)
+    relative_delta = abs(float(left_num) - float(right_num)) / denom
+    if relative_delta <= LAB_DUP_VALUE_TOLERANCE_RELATIVE:
+        return True, "near_numeric"
+    return False, "different_value"
+
+
+def lab_group_id(prefix: str, rows: list[dict[str, Any]], key: tuple[str, ...]) -> str:
+    fact_ids = sorted(str(row.get("fact_id") or "") for row in rows)
+    raw = "|".join([prefix, *key, *fact_ids])
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}_{digest}"
+
+
+def lab_primary_score(row: dict[str, Any]) -> tuple[int, str]:
+    name = str(row.get("analyte_name") or "")
+    score = 0
+    if re.match(r"^\(?[A-Z]{2,8}\s*[#%]?\)?", name):
+        score += 100
+    if str(row.get("method") or "") == "analyzer":
+        score += 10
+    if str(row.get("qa_status") or "") == "ok":
+        score += 5
+    return score, str(row.get("fact_id") or "")
+
+
+def lab_cross_document_group_key(row: dict[str, Any]) -> tuple[str, str, str, str] | None:
+    bundle_id = normalize_space(str(row.get("document_bundle_id") or ""))
+    if not bundle_id:
+        return None
+
+    canonical_key = lab_canonical_key(row)
+    if canonical_key in {"raw::", "raw"}:
+        return None
+
+    value_text = lab_clean_value_text(str(row.get("value_text") or ""))
+    unit = lab_unit_family(str(row.get("unit") or ""))
+    if not value_text:
+        return None
+    return bundle_id, canonical_key, value_text, unit
+
+
+def lab_cross_document_primary_score(row: dict[str, Any], rows_by_doc: dict[str, int]) -> tuple[int, int, str]:
+    doc_id = str(row.get("doc_id") or "")
+    score = rows_by_doc.get(doc_id, 0)
+    source = row.get("source") or {}
+    file_name = str(source.get("file_name") or "")
+    if str(row.get("qa_status") or "") == "ok":
+        score += 1
+    return score, -len(file_name), str(row.get("fact_id") or "")
+
+
+def close_components(rows: list[dict[str, Any]], require_different_method: bool = False) -> list[tuple[list[dict[str, Any]], str]]:
+    parent = list(range(len(rows)))
+    reasons: dict[int, str] = {}
+
+    def find(idx: int) -> int:
+        while parent[idx] != idx:
+            parent[idx] = parent[parent[idx]]
+            idx = parent[idx]
+        return idx
+
+    def union(left: int, right: int, reason: str) -> None:
+        root_left = find(left)
+        root_right = find(right)
+        if root_left == root_right:
+            reasons[root_left] = reasons.get(root_left, reason)
+            return
+        parent[root_right] = root_left
+        reasons[root_left] = reason if reason == "exact_text" else reasons.get(root_left, reason)
+
+    for i, left in enumerate(rows):
+        for j in range(i + 1, len(rows)):
+            right = rows[j]
+            if require_different_method and str(left.get("method") or "") == str(right.get("method") or ""):
+                continue
+            is_close, reason = lab_values_close(left, right)
+            if is_close:
+                union(i, j, reason)
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for idx, row in enumerate(rows):
+        grouped.setdefault(find(idx), []).append(row)
+
+    out: list[tuple[list[dict[str, Any]], str]] = []
+    for root, component in grouped.items():
+        if len(component) > 1:
+            out.append((component, reasons.get(find(root), "near_numeric")))
+    return out
+
+
+def annotate_intra_doc_lab_duplicates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for row in rows:
+        row["duplicate_group_id"] = None
+        row["duplicate_role"] = None
+        row["duplicate_of_fact_id"] = None
+        row["duplicate_reason"] = None
+
+    by_same_method: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    by_analyte: dict[tuple[str, ...], list[dict[str, Any]]] = {}
+    for row in rows:
+        same_method_key = lab_duplicate_group_key(row, include_method=True)
+        analyte_key = lab_duplicate_group_key(row, include_method=False)
+        if same_method_key:
+            by_same_method.setdefault(same_method_key, []).append(row)
+        if analyte_key:
+            by_analyte.setdefault(analyte_key, []).append(row)
+
+    for key, items in by_same_method.items():
+        if len(items) < 2:
+            continue
+        for component, reason in close_components(items):
+            group_id = lab_group_id("labdup", component, key)
+            primary = max(component, key=lab_primary_score)
+            primary["duplicate_group_id"] = group_id
+            primary["duplicate_role"] = "primary"
+            primary["duplicate_reason"] = f"same_doc_same_method_{reason}"
+            for row in component:
+                if row is primary:
+                    continue
+                row["duplicate_group_id"] = group_id
+                row["duplicate_role"] = "duplicate"
+                row["duplicate_of_fact_id"] = primary.get("fact_id")
+                row["duplicate_reason"] = f"same_doc_same_method_{reason}"
+
+    for key, items in by_analyte.items():
+        if len(items) < 2:
+            continue
+        for component, reason in close_components(items, require_different_method=True):
+            group_id = lab_group_id("labrel", component, key)
+            for row in component:
+                if row.get("duplicate_role"):
+                    continue
+                row["duplicate_group_id"] = group_id
+                row["duplicate_role"] = "related"
+                row["duplicate_reason"] = f"same_doc_different_method_{reason}"
+
+    return rows
+
+
+def annotate_cross_document_lab_duplicates(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    for row in rows:
+        row["cross_document_duplicate_group_id"] = None
+        row["cross_document_duplicate_role"] = None
+        row["cross_document_duplicate_of_fact_id"] = None
+        row["cross_document_duplicate_reason"] = None
+
+    rows_by_doc: dict[str, int] = {}
+    grouped: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for row in rows:
+        doc_id = str(row.get("doc_id") or "")
+        rows_by_doc[doc_id] = rows_by_doc.get(doc_id, 0) + 1
+        key = lab_cross_document_group_key(row)
+        if key:
+            grouped.setdefault(key, []).append(row)
+
+    for key, items in grouped.items():
+        doc_ids = {str(row.get("doc_id") or "") for row in items}
+        if len(doc_ids) < 2:
+            continue
+
+        group_id = lab_group_id("labxdocdup", items, key)
+        primary = max(items, key=lambda row: lab_cross_document_primary_score(row, rows_by_doc))
+        primary["cross_document_duplicate_group_id"] = group_id
+        primary["cross_document_duplicate_role"] = "primary"
+        primary["cross_document_duplicate_reason"] = "same_bundle_same_canonical_value_unit"
+
+        for row in items:
+            if row is primary:
+                continue
+            row["cross_document_duplicate_group_id"] = group_id
+            row["cross_document_duplicate_role"] = "duplicate"
+            row["cross_document_duplicate_of_fact_id"] = primary.get("fact_id")
+            row["cross_document_duplicate_reason"] = "same_bundle_same_canonical_value_unit"
+
+    return rows
 
 
 def clinical_qa_reasons(text: str, finding_type: str) -> list[str]:
@@ -513,6 +863,73 @@ def source_for_doc(
     return source
 
 
+def build_document_bundle_index(
+    registry_by_doc: dict[str, dict[str, Any]],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for row in registry_by_doc.values():
+        patient_id = str(row.get("patient_id") or "self").strip()
+        event_date = (
+            iso_from_registry_date(str(row.get("document_date") or ""))
+            or iso_from_registry_date(str(row.get("event_date_raw") or ""))
+        )
+        doc_type = str(row.get("doc_type") or "unknown").strip()
+        doc_id = str(row.get("id") or "").strip()
+        if not patient_id or not event_date or not doc_type or not doc_id:
+            continue
+        grouped.setdefault((patient_id, event_date, doc_type), []).append(row)
+
+    bundle_by_doc: dict[str, dict[str, Any]] = {}
+    bundles: list[dict[str, Any]] = []
+    for (patient_id, event_date, doc_type), docs in sorted(grouped.items()):
+        if len(docs) < 2:
+            continue
+        doc_ids = sorted(str(row.get("id") or "") for row in docs if str(row.get("id") or ""))
+        raw_id = "|".join(["docbundle", patient_id, event_date, doc_type, *doc_ids])
+        bundle_id = f"docbundle_{hashlib.sha1(raw_id.encode('utf-8')).hexdigest()[:12]}"
+        bundle_key = "::".join([patient_id, event_date, doc_type])
+        meta = {
+            "document_bundle_id": bundle_id,
+            "document_bundle_key": bundle_key,
+            "patient_id": patient_id,
+            "event_date": event_date,
+            "doc_type": doc_type,
+            "document_count": len(doc_ids),
+            "doc_ids": doc_ids,
+            "file_names": [str(row.get("file_name") or "") for row in docs],
+            "medical_organizations": sorted(
+                {
+                    str(row.get("medical_organization") or "").strip()
+                    for row in docs
+                    if str(row.get("medical_organization") or "").strip()
+                }
+            ),
+            "departments": sorted(
+                {
+                    str(row.get("department") or "").strip()
+                    for row in docs
+                    if str(row.get("department") or "").strip()
+                }
+            ),
+        }
+        bundles.append(meta)
+        for doc_id in doc_ids:
+            bundle_by_doc[doc_id] = meta
+    return bundle_by_doc, bundles
+
+
+def annotate_document_bundles(
+    rows: list[dict[str, Any]],
+    bundle_by_doc: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    for row in rows:
+        bundle = bundle_by_doc.get(str(row.get("doc_id") or ""))
+        row["document_bundle_id"] = bundle.get("document_bundle_id") if bundle else None
+        row["document_bundle_key"] = bundle.get("document_bundle_key") if bundle else None
+        row["document_bundle_size"] = bundle.get("document_count") if bundle else None
+    return rows
+
+
 def build_lab_facts(
     registry_by_doc: dict[str, dict[str, Any]],
     full_by_doc: dict[str, dict[str, Any]],
@@ -550,6 +967,7 @@ def build_lab_facts(
                 parameter, reference = normalize_lab_parameter_and_reference(parameter, reference)
                 unit = normalize_space(str(item.get("unit") or "")) or None
                 value_num = parse_numeric_value(result_text)
+                lab_norm = infer_cbc_lab_normalization(parameter, section_name, unit)
 
                 qa_reasons = lab_qa_reasons(parameter, result_text, value_num, reference)
                 qa_status = qa_from_reasons(
@@ -582,6 +1000,11 @@ def build_lab_facts(
                         "evidence_excerpt": evidence,
                         "section_name": section_name,
                         "analyte_name": parameter,
+                        "analyte_id": lab_norm.get("analyte_id"),
+                        "measurement_kind": lab_norm.get("measurement_kind"),
+                        "method": lab_norm.get("method"),
+                        "specimen": lab_norm.get("specimen"),
+                        "normalized_label": lab_norm.get("normalized_label"),
                         "value_text": result_text,
                         "value_num": value_num,
                         "unit": unit,
@@ -814,6 +1237,10 @@ def count_by(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return out
 
 
+def lab_result_is_display_primary(row: dict[str, Any]) -> bool:
+    return row.get("duplicate_role") != "duplicate" and row.get("cross_document_duplicate_role") != "duplicate"
+
+
 def main() -> None:
     run_ts = now_utc()
     registry = load_json(REGISTRY_PATH)
@@ -823,13 +1250,20 @@ def main() -> None:
         if str(row.get("id") or "").strip()
     }
     full_by_doc = collect_full_extraction_by_doc()
+    bundle_by_doc, document_bundles = build_document_bundle_index(registry_by_doc)
 
-    lab_rows = build_lab_facts(registry_by_doc, full_by_doc)
-    clinical_rows = build_clinical_facts(registry_by_doc, full_by_doc)
-    reco_rows = build_recommendation_facts(registry_by_doc, full_by_doc)
-    med_rows = build_medication_facts(registry_by_doc, full_by_doc)
+    lab_rows = annotate_cross_document_lab_duplicates(
+        annotate_intra_doc_lab_duplicates(
+            annotate_document_bundles(build_lab_facts(registry_by_doc, full_by_doc), bundle_by_doc)
+        )
+    )
+    clinical_rows = annotate_document_bundles(build_clinical_facts(registry_by_doc, full_by_doc), bundle_by_doc)
+    reco_rows = annotate_document_bundles(build_recommendation_facts(registry_by_doc, full_by_doc), bundle_by_doc)
+    med_rows = annotate_document_bundles(build_medication_facts(registry_by_doc, full_by_doc), bundle_by_doc)
+    visible_lab_rows = [row for row in lab_rows if lab_result_is_display_primary(row)]
 
     FACTS_DIR.mkdir(parents=True, exist_ok=True)
+    bundles_path = FACTS_DIR / "document_bundles_v1.json"
     labs_path = FACTS_DIR / "lab_results_v1.ndjson"
     clinical_path = FACTS_DIR / "clinical_findings_v1.ndjson"
     reco_path = FACTS_DIR / "recommendation_items_v1.ndjson"
@@ -837,6 +1271,7 @@ def main() -> None:
     summary_path = FACTS_DIR / "fact_layer_v1_summary.json"
     preview_path = REPORTS_DIR / "fact_layer_v1_preview.json"
 
+    save_json(bundles_path, document_bundles)
     write_ndjson(labs_path, lab_rows)
     write_ndjson(clinical_path, clinical_rows)
     write_ndjson(reco_path, reco_rows)
@@ -853,7 +1288,19 @@ def main() -> None:
             "recommendation_docs": len(list(RECS_DIR.glob("recommendation_*.json"))),
         },
         "outputs": {
+            "document_bundles_count": len(document_bundles),
+            "document_bundle_docs_count": len(bundle_by_doc),
+            "fact_rows_in_document_bundles_counts": {
+                "lab_results": sum(1 for row in lab_rows if row.get("document_bundle_id")),
+                "clinical_findings": sum(1 for row in clinical_rows if row.get("document_bundle_id")),
+                "recommendation_items": sum(1 for row in reco_rows if row.get("document_bundle_id")),
+                "medication_items": sum(1 for row in med_rows if row.get("document_bundle_id")),
+            },
             "lab_results_count": len(lab_rows),
+            "lab_results_display_primary_count": len(visible_lab_rows),
+            "lab_results_hidden_duplicate_count": len(lab_rows) - len(visible_lab_rows),
+            "lab_duplicate_role_counts": count_by(lab_rows, "duplicate_role"),
+            "lab_cross_document_duplicate_role_counts": count_by(lab_rows, "cross_document_duplicate_role"),
             "clinical_findings_count": len(clinical_rows),
             "recommendation_items_count": len(reco_rows),
             "medication_items_count": len(med_rows),
@@ -871,6 +1318,7 @@ def main() -> None:
             },
         },
         "paths": {
+            "document_bundles": str(bundles_path).replace("\\", "/"),
             "lab_results": str(labs_path).replace("\\", "/"),
             "clinical_findings": str(clinical_path).replace("\\", "/"),
             "recommendation_items": str(reco_path).replace("\\", "/"),
@@ -885,6 +1333,7 @@ def main() -> None:
         "generated_at": run_ts,
         "counts": summary["outputs"],
         "sample": {
+            "document_bundles": document_bundles[:25],
             "lab_results": lab_rows[:25],
             "clinical_findings": clinical_rows[:25],
             "recommendation_items": reco_rows[:25],
@@ -913,5 +1362,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
