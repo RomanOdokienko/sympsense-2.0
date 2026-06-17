@@ -651,6 +651,44 @@ function labDuplicateHiddenByDefault(row){
   return row?.duplicate_role === 'duplicate' || row?.cross_document_duplicate_role === 'duplicate';
 }
 
+function labDuplicateClusterKey(row){
+  const duplicateRole = (row?.duplicate_role || '').toString();
+  const crossRole = (row?.cross_document_duplicate_role || '').toString();
+  const canCollapseIntra = duplicateRole === 'primary' || duplicateRole === 'duplicate';
+  const canCollapseCross = crossRole === 'primary' || crossRole === 'duplicate';
+  const intra = canCollapseIntra ? (row?.duplicate_group_id || row?.duplicate_of_fact_id || '').toString().trim() : '';
+  if(intra) return `intra::${intra}`;
+  const cross = canCollapseCross ? (row?.cross_document_duplicate_group_id || row?.cross_document_duplicate_of_fact_id || '').toString().trim() : '';
+  if(cross) return `cross::${cross}`;
+  return (row?.fact_id || '').toString().trim();
+}
+
+function labDisplayRows(labFacts, includeDuplicates){
+  if(includeDuplicates) return labFacts || [];
+  const groups = new Map();
+  for(const row of (labFacts || [])){
+    const key = labDuplicateClusterKey(row);
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  }
+  const out = [];
+  for(const cluster of groups.values()){
+    const primary = cluster.find(x => x?.duplicate_role === 'primary' || x?.cross_document_duplicate_role === 'primary');
+    const visible = cluster.find(x => !labDuplicateHiddenByDefault(x));
+    const chosen = primary || visible || cluster[0];
+    if(!chosen) continue;
+    const duplicateSources = cluster.filter(x => labDuplicateHiddenByDefault(x));
+    out.push({
+      ...chosen,
+      display_source_count: cluster.length,
+      display_duplicate_source_count: duplicateSources.length,
+      display_raw_labels: [...new Set(cluster.map(x => (x?.analyte_name || '').toString().trim()).filter(Boolean))],
+      display_source_fact_ids: cluster.map(x => (x?.fact_id || '').toString().trim()).filter(Boolean),
+    });
+  }
+  return out;
+}
+
 function labMeasurementSuffix(row){
   const kind = (row?.measurement_kind || '').toString();
   if(kind === 'absolute') return ', абс.';
@@ -665,6 +703,14 @@ function labDisplayName(row){
   return (row?.analyte_name || '').toString().trim();
 }
 
+function labUnitFamily(unit){
+  const value = (unit || '').toString().trim().toLowerCase().replaceAll('x10^', '10*').replaceAll('10^', '10*');
+  if(value.includes('%')) return '%';
+  if(value.includes('10*9') || value.includes('тыс/мкл')) return '10*9/л';
+  if(value.includes('10*12') || value.includes('млн/мкл')) return '10*12/л';
+  return value;
+}
+
 function labSummaryGroupKey(row, displayName){
   const analyteId = (row?.analyte_id || '').toString().trim();
   if(analyteId){
@@ -672,7 +718,7 @@ function labSummaryGroupKey(row, displayName){
       row?.specimen || 'unknown_specimen',
       analyteId,
       row?.measurement_kind || 'value',
-      row?.unit || '',
+      labUnitFamily(row?.unit || ''),
     ].join('::').toLowerCase();
   }
   return (displayName || '').toLowerCase();
@@ -682,9 +728,10 @@ function buildLabSummaryRows(labFacts){
   const groups = new Map();
   const yearsSet = new Set();
   const includeDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const displayRows = labDisplayRows(labFacts, includeDuplicates);
   const duplicateStats = {
     total: (labFacts || []).length,
-    visible: 0,
+    visible: displayRows.length,
     hidden: 0,
     intra_document: 0,
     cross_document: 0,
@@ -695,9 +742,9 @@ function buildLabSummaryRows(labFacts){
       duplicateStats.hidden += 1;
       if(row?.duplicate_role === 'duplicate') duplicateStats.intra_document += 1;
       if(row?.cross_document_duplicate_role === 'duplicate') duplicateStats.cross_document += 1;
-      if(!includeDuplicates) continue;
     }
-    duplicateStats.visible += 1;
+  }
+  for(const row of displayRows){
     const rawName = labDisplayName(row);
     if(!rawName) continue;
     const dateRaw = (row.event_date || '').toString().trim();
@@ -722,6 +769,9 @@ function buildLabSummaryRows(labFacts){
         reference: (x.reference_range_text || '').toString(),
         duplicate_role: (x.duplicate_role || '').toString(),
         cross_document_duplicate_role: (x.cross_document_duplicate_role || '').toString(),
+        source_count: Number(x.display_source_count || 1),
+        duplicate_source_count: Number(x.display_duplicate_source_count || 0),
+        raw_labels: x.display_raw_labels || [],
       }))
       .filter(x => x.date)
       .sort((a,b) => a.date.localeCompare(b.date));
@@ -843,7 +893,10 @@ function renderLabSummaryTableMarkup(items){
       const duplicateMark = (point.duplicate_role === 'duplicate' || point.cross_document_duplicate_role === 'duplicate')
         ? '<div class="k">дубль</div>'
         : '';
-      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
+      const sourceMark = Number(point.source_count || 1) > 1
+        ? `<div class="k">${e(point.source_count)} записи схлопнуты</div>`
+        : '';
+      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}${sourceMark}</td>`;
     }).join('');
     return `
       <tr>
