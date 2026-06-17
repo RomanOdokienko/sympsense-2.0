@@ -96,13 +96,26 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .card .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
 .card .num{font-size:22px;font-weight:700;color:var(--text)}
 .lab-table{width:100%;table-layout:fixed}
-.lab-table th{font-size:11px;color:var(--muted);background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
-.lab-table td{font-size:13px;color:var(--text)}
-.lab-table th,.lab-table td{word-break:break-word}
-.lab-name-cell{font-weight:600;color:var(--text)}
+.lab-table th{font-size:10px;color:#8f97b0;background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.lab-table td{font-size:13px;color:var(--text);line-height:1.25}
+.lab-table th,.lab-table td{word-break:normal;overflow-wrap:anywhere}
+.lab-name-cell{font-weight:400;color:#d8dce8}
 .lab-name-continuation{position:relative;min-height:18px}
 .lab-name-continuation::before{content:"";display:block;width:18px;height:1px;background:#475069;margin-top:9px;margin-left:2px;opacity:.75}
 .lab-kind{display:inline-flex;align-items:center;justify-content:center;min-width:34px;max-width:100%;box-sizing:border-box;padding:2px 7px;border-radius:999px;border:1px solid #3a4158;background:#202534;color:#aeb5ca;font-size:11px;font-weight:600;line-height:1.25;white-space:nowrap}
+.lab-value{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.lab-reference{display:inline-block;max-width:100%;font-size:12px;color:#b9bfd0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.lab-statbar{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:12px}
+.lab-stat{display:inline-flex;align-items:baseline;gap:4px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#202534;color:var(--muted);white-space:nowrap}
+.lab-stat b{font-size:12px;color:#d8dce8;font-weight:600}
+.lab-stat-alert{border-color:#573142;background:#281b27;color:#d6a2ad}
+.lab-section{border-top:1px solid #384056;padding-top:12px;margin-top:14px}
+.lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:#202534;border:1px solid #30374c;color:#d8dce8}
+.lab-section summary::-webkit-details-marker{display:none}
+.lab-section summary::before{content:"";width:7px;height:7px;border-right:1.5px solid #8f97b0;border-bottom:1.5px solid #8f97b0;transform:rotate(-45deg);transition:transform .15s ease}
+.lab-section[open] summary::before{transform:rotate(45deg)}
+.lab-section-title{font-size:12px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.lab-section-count{font-size:11px;color:var(--muted)}
 .analytics-list{margin-top:8px}
 .analytics-row{padding:6px 0;border-bottom:1px solid var(--line);color:var(--text)}
 .analytics-row:last-child{border-bottom:none}
@@ -112,7 +125,7 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .link-btn{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer}
 .link-btn:hover{border-color:#1e3a6a;color:var(--blue)}
 .queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
-.lab-summary-controls{display:grid;grid-template-columns:1.6fr 1fr 0.8fr 1fr;gap:8px;margin-bottom:8px}
+.lab-summary-controls{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(150px,.7fr) minmax(130px,.55fr) minmax(260px,1fr);gap:8px;margin-bottom:8px;align-items:stretch}
 .lab-trend-up{color:var(--red);font-weight:600}
 .lab-trend-down{color:var(--blue);font-weight:600}
 .lab-trend-flat{color:var(--muted);font-weight:600}
@@ -937,7 +950,7 @@ function renderLabSummaryTableMarkup(items){
       const duplicateMark = (point.duplicate_role === 'duplicate' || point.cross_document_duplicate_role === 'duplicate')
         ? '<div class="k">дубль</div>'
         : '';
-      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
+      return `<td><span class="lab-value ${cls}" title="${e(point.value_text || '—')}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
     }).join('');
     const baseName = x.analyte_base_name || x.analyte_name || '';
     const showBaseName = baseName !== prevBaseName;
@@ -947,7 +960,7 @@ function renderLabSummaryTableMarkup(items){
         <td class="${showBaseName ? 'lab-name-cell' : 'lab-name-continuation'}">${showBaseName ? e(baseName) : ''}</td>
         <td><span class="lab-kind">${e(x.measurement_label || 'знач.')}</span></td>
         ${yearCells}
-        <td>${e(cleanReferenceText(x.latest_reference || '') || '—')}</td>
+        <td><span class="lab-reference" title="${e(cleanReferenceText(x.latest_reference || '') || '—')}">${e(cleanReferenceText(x.latest_reference || '') || '—')}</span></td>
         <td>${x.latest_doc_id ? `<button class="link-btn" onclick="openDoc('${e(x.latest_doc_id)}')">к документу</button>` : '—'}</td>
       </tr>
     `;
@@ -955,10 +968,10 @@ function renderLabSummaryTableMarkup(items){
   return `
     <table class="lab-table">
       <colgroup>
-        <col style="width:25%">
+        <col style="width:21%">
         <col style="width:7%">
         ${yearCols}
-        <col style="width:22%">
+        <col style="width:19%">
         <col style="width:10%">
       </colgroup>
       <thead>
@@ -1000,15 +1013,15 @@ function renderLabSummaryTable(items){
     const rows = grouped.get(g) || [];
     if(!rows.length) continue;
     parts.push(`
-      <details class="sec" open>
-        <summary><b>${e(g)}</b> (${rows.length})</summary>
+      <details class="lab-section" open>
+        <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${rows.length}</span></summary>
         <div style="margin-top:8px">${renderLabSummaryTableMarkup(rows)}</div>
       </details>
     `);
   }
   parts.push(`
-    <details class="sec">
-      <summary><b>Не обнаружено / без информативной динамики</b> (${nonDetected.length})</summary>
+    <details class="lab-section">
+      <summary><span class="lab-section-title">Без динамики</span><span class="lab-section-count">${nonDetected.length}</span></summary>
       <div style="margin-top:8px">${nonDetected.length ? renderLabSummaryTableMarkup(nonDetected) : '<div class="muted">Нет строк в этой группе.</div>'}</div>
     </details>
   `);
@@ -1049,10 +1062,18 @@ function renderLabSummary(){
   const abnormalSeries = filtered.filter(x => Number(x.abnormal_count || 0) > 0).length;
   const st = labSummaryDuplicateStats || {};
   const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
-  const hiddenText = st.hidden
-    ? ` | дублей ${showingDuplicates ? 'показано' : 'скрыто'}: <b>${st.hidden}</b> (${Number(st.intra_document || 0)} в документе, ${Number(st.cross_document || 0)} между документами)`
-    : '';
-  labSummaryStatsEl.innerHTML = `Показателей: <b>${filtered.length}</b> из <b>${labSummaryRows.length}</b> | строк: <b>${Number(st.visible || 0)}</b> из <b>${Number(st.total || 0)}</b>${hiddenText} | с отклонениями: <b>${abnormalSeries}</b>`;
+  const duplicateTitle = st.hidden
+    ? `${showingDuplicates ? 'Показано' : 'Скрыто'} дублей: ${Number(st.hidden || 0)}; внутри документа: ${Number(st.intra_document || 0)}; между документами: ${Number(st.cross_document || 0)}`
+    : 'Дублей нет';
+  const duplicateLabel = showingDuplicates ? 'дубли показаны' : 'дубли скрыты';
+  labSummaryStatsEl.innerHTML = `
+    <div class="lab-statbar">
+      <span class="lab-stat" title="Показатели"><b>${filtered.length}</b>/<span>${labSummaryRows.length}</span> показ.</span>
+      <span class="lab-stat" title="Строки данных"><b>${Number(st.visible || 0)}</b>/<span>${Number(st.total || 0)}</span> строк</span>
+      <span class="lab-stat" title="${e(duplicateTitle)}"><b>${Number(st.hidden || 0)}</b> ${e(duplicateLabel)}</span>
+      <span class="lab-stat lab-stat-alert" title="Показатели с отклонениями"><b>${abnormalSeries}</b> откл.</span>
+    </div>
+  `;
   renderLabSummaryTable(filtered);
 }
 
