@@ -931,10 +931,7 @@ function renderLabSummaryTableMarkup(items){
       const duplicateMark = (point.duplicate_role === 'duplicate' || point.cross_document_duplicate_role === 'duplicate')
         ? '<div class="k">дубль</div>'
         : '';
-      const sourceMark = Number(point.source_count || 1) > 1
-        ? `<div class="k">${e(point.source_count)} записи схлопнуты</div>`
-        : '';
-      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}${sourceMark}</td>`;
+      return `<td><span class="${cls}">${e(point.value_text || '—')}</span>${duplicateMark}</td>`;
     }).join('');
     const baseName = x.analyte_base_name || x.analyte_name || '';
     const showBaseName = baseName !== prevBaseName;
