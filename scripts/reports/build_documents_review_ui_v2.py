@@ -99,6 +99,10 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-table th{font-size:11px;color:var(--muted);background:transparent;font-weight:600;text-transform:uppercase;letter-spacing:.06em}
 .lab-table td{font-size:13px;color:var(--text)}
 .lab-table th,.lab-table td{word-break:break-word}
+.lab-name-cell{font-weight:600;color:var(--text)}
+.lab-name-continuation{position:relative;min-height:18px}
+.lab-name-continuation::before{content:"";display:block;width:18px;height:1px;background:#475069;margin-top:9px;margin-left:2px;opacity:.75}
+.lab-kind{display:inline-flex;align-items:center;justify-content:center;min-width:34px;max-width:100%;box-sizing:border-box;padding:2px 7px;border-radius:999px;border:1px solid #3a4158;background:#202534;color:#aeb5ca;font-size:11px;font-weight:600;line-height:1.25;white-space:nowrap}
 .analytics-list{margin-top:8px}
 .analytics-row{padding:6px 0;border-bottom:1px solid var(--line);color:var(--text)}
 .analytics-row:last-child{border-bottom:none}
@@ -706,17 +710,17 @@ function labBaseDisplayName(row){
 function labMeasurementLabel(row){
   const kind = (row?.measurement_kind || '').toString();
   const method = (row?.method || '').toString();
-  let label = 'значение';
+  let label = 'знач.';
   if(kind === 'absolute') label = 'абс.';
   if(kind === 'percent') label = '%';
-  if(kind === 'count') label = 'количество';
+  if(kind === 'count') label = 'кол-во';
   if(method === 'manual_microscopy') return `микроскопия, ${label}`;
   return label;
 }
 
 function labMeasurementRank(label){
   const value = (label || '').toString();
-  if(value === 'абс.' || value === 'количество') return 1;
+  if(value === 'абс.' || value === 'кол-во') return 1;
   if(value === '%') return 2;
   if(value.startsWith('микроскопия')) return 3;
   return 9;
@@ -938,8 +942,8 @@ function renderLabSummaryTableMarkup(items){
     prevBaseName = baseName;
     return `
       <tr>
-        <td>${showBaseName ? e(baseName) : '<span class="muted">↳</span>'}</td>
-        <td>${e(x.measurement_label || 'значение')}</td>
+        <td class="${showBaseName ? 'lab-name-cell' : 'lab-name-continuation'}">${showBaseName ? e(baseName) : ''}</td>
+        <td><span class="lab-kind">${e(x.measurement_label || 'знач.')}</span></td>
         ${yearCells}
         <td>${e(cleanReferenceText(x.latest_reference || '') || '—')}</td>
         <td>${x.latest_doc_id ? `<button class="link-btn" onclick="openDoc('${e(x.latest_doc_id)}')">к документу</button>` : '—'}</td>
@@ -949,8 +953,8 @@ function renderLabSummaryTableMarkup(items){
   return `
     <table class="lab-table">
       <colgroup>
-        <col style="width:24%">
-        <col style="width:10%">
+        <col style="width:25%">
+        <col style="width:7%">
         ${yearCols}
         <col style="width:22%">
         <col style="width:10%">
