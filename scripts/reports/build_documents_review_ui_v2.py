@@ -1327,6 +1327,7 @@ function renderLabSummaryTable(items, options = {}){
     return;
   }
   const collapseLowUtility = !!options.collapseLowUtility;
+  const openAttr = options.openSections ? ' open' : '';
 
   const nonDetected = [];
   const grouped = new Map();
@@ -1367,7 +1368,7 @@ function renderLabSummaryTable(items, options = {}){
     const gc = labGroupColor(g);
     const tint = `${gc}12`;
     parts.push(`
-      <details class="lab-section" style="border-left-color:${gc}">
+      <details class="lab-section"${openAttr} style="border-left-color:${gc}">
         <summary style="background:${tint}"><span class="lab-section-title" style="color:${gc}">${e(g)}</span><span class="lab-section-count">${sectionCountLabel}</span></summary>
         <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
         ${collapsedBlock}
@@ -1375,7 +1376,7 @@ function renderLabSummaryTable(items, options = {}){
     `);
   }
   parts.push(`
-    <details class="lab-section" style="border-left-color:${labGroupColor('Качественные / без динамики')}">
+    <details class="lab-section"${openAttr} style="border-left-color:${labGroupColor('Качественные / без динамики')}">
       <summary style="background:${labGroupColor('Качественные / без динамики')}12"><span class="lab-section-title" style="color:${labGroupColor('Качественные / без динамики')}">Качественные / без динамики</span><span class="lab-section-count">${nonDetected.length}</span></summary>
       <div style="margin-top:8px">${nonDetected.length ? renderLabSummaryTableMarkup(nonDetected) : '<div class="muted">Нет строк в этой группе.</div>'}</div>
     </details>
@@ -1433,7 +1434,8 @@ function renderLabSummary(){
       <span class="lab-stat lab-stat-muted" title="Показатели в текущем фильтре"><b>${filtered.length}</b>/${labSummaryRows.length} показ.</span>
     </div>
   `;
-  renderLabSummaryTable(filtered, { collapseLowUtility });
+  const openSections = !!(query || flag);
+  renderLabSummaryTable(filtered, { collapseLowUtility, openSections });
 }
 
 function renderWhatMatters(rows, years){
@@ -1811,7 +1813,48 @@ function labTrendDir(row){
   return diff > 0.05 ? 'up' : diff < -0.05 ? 'down' : 'flat';
 }
 
-function renderHealthCard(){
+async function loadAnalystFindings(){
+  try {
+    const res = await fetch(readApiUrl('/v1/reports/analyst-findings/latest'));
+    if(!res.ok) return null;
+    return await res.json();
+  } catch { return null; }
+}
+
+function renderAnalystFindings(findings, container){
+  if(!findings || !findings.findings?.length){
+    container.innerHTML = '';
+    return;
+  }
+  const date = (findings.as_of_date || findings.generated_at || '').slice(0,10);
+  const prio = f => f.priority === 'high' ? 'prio-chip prio-high' : f.priority === 'medium' ? 'prio-chip prio-medium' : 'prio-chip prio-low';
+  const prioLabel = f => f.priority === 'high' ? 'ВЫСОКИЙ' : f.priority === 'medium' ? 'СРЕДНИЙ' : 'НИЗКИЙ';
+  const statusDot = f => f.status === 'resolved' ? '🟢 ' : f.status === 'new' ? '🔴 ' : '';
+  const activeFindings = findings.findings.filter(f => f.status !== 'resolved');
+  const resolved = findings.resolved_since_last || [];
+  container.innerHTML = `
+    <div class="hc-section" style="margin-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="hc-section-title" style="margin-bottom:0">Аналитика здоровья</div>
+        <span style="font-size:11px;color:var(--muted)">${e(date)}</span>
+      </div>
+      ${findings.summary?.key_message ? `<div style="font-size:13px;color:var(--muted);margin-bottom:12px;font-style:italic">${e(findings.summary.key_message)}</div>` : ''}
+      ${activeFindings.map(f => `
+        <div class="hc-item">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:4px">
+            <div class="hc-item-name">${statusDot(f)}${e(f.title||'')}</div>
+            <span class="${prio(f)}" style="flex-shrink:0">${prioLabel(f)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:3px">${e(f.pattern||'')}</div>
+          <div style="font-size:12px;color:var(--blue)">→ ${e(f.action||'')}</div>
+        </div>`).join('')}
+      ${resolved.length ? `<div style="margin-top:10px;font-size:11px;color:var(--muted)">Закрыто с прошлого отчёта: ${resolved.map(r=>e(r.title||'')).join(', ')}</div>` : ''}
+      <div style="margin-top:10px;font-size:11px;color:#4b5578">${e(findings.disclaimer||'')}</div>
+    </div>
+  `;
+}
+
+async function renderHealthCard(){
   const el = document.getElementById('healthCardPanel');
   if(!el) return;
   const payload = briefingPayloadGlobal;
@@ -1927,6 +1970,10 @@ function renderHealthCard(){
       </div>` : ''}
     </div>
   `;
+
+  const analystContainer = document.createElement('div');
+  el.appendChild(analystContainer);
+  loadAnalystFindings().then(findings => renderAnalystFindings(findings, analystContainer));
 }
 
 async function rebuildPatientBriefing(){

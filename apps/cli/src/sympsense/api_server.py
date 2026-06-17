@@ -791,6 +791,19 @@ def create_app(data_root: Path | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    @app.get("/v1/reports/analyst-findings/latest")
+    def get_analyst_findings_latest() -> dict[str, Any]:
+        project_root: Path = app.state.project_root
+        reports_dir = project_root / "data" / "derived" / "reports"
+        files = sorted(reports_dir.glob("analyst_findings_*.json"), reverse=True)
+        if not files:
+            raise HTTPException(status_code=404, detail="No analyst findings reports found")
+        try:
+            import json
+            return json.loads(files[0].read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     @app.get("/v1/facts/problem-list/v1")
     def get_problem_list_v1() -> dict[str, Any]:
         project_root: Path = app.state.project_root
