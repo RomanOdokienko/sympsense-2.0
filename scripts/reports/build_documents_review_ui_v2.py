@@ -216,7 +216,13 @@ details.sec[open] summary{margin-bottom:6px}
     <div class="h1">Sympsense 2.0</div>
     <a href="/longevity" style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--green);text-decoration:none;border:1px solid #166534;padding:3px 10px;border-radius:6px;opacity:.85">Longevity ↗</a>
   </div>
-  <div class="muted" id="qualityLine" style="font-size:12px;margin-top:2px"></div>
+  <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
+    <div class="muted" id="qualityLine" style="font-size:12px"></div>
+    <div id="apiStatusDot" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">
+      <span id="apiStatusCircle" style="width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;display:inline-block"></span>
+      <span id="apiStatusText">API</span>
+    </div>
+  </div>
   <div id="notice" class="notice"></div>
 
   <div class="toolbar">
@@ -683,14 +689,32 @@ function assetHref(relPath, fallbackHref){
   return fallbackHref || '';
 }
 
+function setApiStatus(ok, label){
+  const circle = document.getElementById('apiStatusCircle');
+  const text = document.getElementById('apiStatusText');
+  if(circle) circle.style.background = ok ? 'var(--green)' : '#f87171';
+  if(text) text.textContent = label;
+}
+
 async function probeDeleteApi(){
   try {
     const res = await fetch(deleteApiUrl('/api/health'), { method:'GET' });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     deleteApiReady = true;
+    setApiStatus(true, 'API');
   } catch(err) {
     deleteApiReady = false;
+    setApiStatus(true, 'API (ro)');
     setNotice(`API чтения доступен, удаление недоступно: ${err.message}`, true);
+  }
+}
+
+async function probeReadApi(){
+  try {
+    await fetch(readApiUrl('/v1/quality/latest'));
+    setApiStatus(true, 'API');
+  } catch {
+    setApiStatus(false, 'API offline');
   }
 }
 
@@ -2260,9 +2284,11 @@ async function reloadAll(){
       await loadFactQueue();
       await loadAnalyticsSnapshot();
     }
+    await probeReadApi();
     await probeDeleteApi();
     filt();
   } catch(err) {
+    setApiStatus(false, 'API offline');
     setNotice(`API чтения недоступен: ${err.message}`, true);
     rows = [];
     buildTypeOptions();

@@ -800,7 +800,7 @@ def create_app(data_root: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="No analyst findings reports found")
         try:
             import json
-            return json.loads(files[0].read_text(encoding="utf-8"))
+            return json.loads(files[0].read_text(encoding="utf-8-sig"))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
