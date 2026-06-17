@@ -374,6 +374,7 @@ function setAdvancedMode(enabled){
     el.style.display = advancedModeEnabled ? '' : 'none';
   });
   renderQualityLine();
+  if(labSummaryFacts.length) rebuildLabSummaryFromFacts();
   if(!advancedModeEnabled && (activeView === 'review' || activeView === 'analytics')){
     setActiveView('briefing');
   }
@@ -775,6 +776,7 @@ function buildLabSummaryRows(labFacts){
     }
   }
   for(const row of displayRows){
+    if(!advancedModeEnabled && row?.method === 'manual_microscopy') continue;
     const rawName = labDisplayName(row);
     if(!rawName) continue;
     const dateRaw = (row.event_date || '').toString().trim();

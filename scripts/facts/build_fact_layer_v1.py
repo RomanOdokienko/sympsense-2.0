@@ -382,7 +382,13 @@ def is_cbc_context(parameter: str, section_name: str) -> bool:
     return bool(CBC_SECTION_RE.search(section_name or "") or CBC_CODE_RE.search(parameter or ""))
 
 
-def infer_cbc_lab_normalization(parameter: str, section_name: str, unit: str | None) -> dict[str, str | None]:
+def infer_cbc_lab_normalization(
+    parameter: str,
+    section_name: str,
+    unit: str | None,
+    *,
+    manual_microscopy_context: bool = False,
+) -> dict[str, str | None]:
     """Return additive normalized lab fields for CBC rows without changing source names."""
 
     if not is_cbc_context(parameter, section_name):
@@ -402,7 +408,9 @@ def infer_cbc_lab_normalization(parameter: str, section_name: str, unit: str | N
     if not analyte_id:
         return {}
 
-    method = "manual_microscopy" if re.search(r"микроскоп|палочкоядер|сегментоядер|сегм\.", p) else "analyzer"
+    has_analyzer_code = bool(re.match(r"^\(?[a-z]{2,8}\s*[#%]?\)?", p, flags=re.IGNORECASE))
+    has_manual_marker = bool(re.search(r"микроскоп|палочкоядер|сегментоядер|сегм\.", p))
+    method = "manual_microscopy" if has_manual_marker or (manual_microscopy_context and not has_analyzer_code) else "analyzer"
 
     measurement_kind = "value"
     if analyte_id in CBC_DIFFERENTIAL_ANALYTES:
@@ -957,6 +965,7 @@ def build_lab_facts(
             if not isinstance(section, dict):
                 continue
             section_name = str(section.get("name") or "section")
+            manual_microscopy_context = False
             for item in section.get("items") or []:
                 if not isinstance(item, dict):
                     continue
@@ -967,7 +976,15 @@ def build_lab_facts(
                 parameter, reference = normalize_lab_parameter_and_reference(parameter, reference)
                 unit = normalize_space(str(item.get("unit") or "")) or None
                 value_num = parse_numeric_value(result_text)
-                lab_norm = infer_cbc_lab_normalization(parameter, section_name, unit)
+                param_l = normalize_space(parameter).lower().replace("ё", "е")
+                if re.search(r"микроскоп|палочкоядер|сегментоядер|сегм\.", param_l):
+                    manual_microscopy_context = True
+                lab_norm = infer_cbc_lab_normalization(
+                    parameter,
+                    section_name,
+                    unit,
+                    manual_microscopy_context=manual_microscopy_context,
+                )
 
                 qa_reasons = lab_qa_reasons(parameter, result_text, value_num, reference)
                 qa_status = qa_from_reasons(
