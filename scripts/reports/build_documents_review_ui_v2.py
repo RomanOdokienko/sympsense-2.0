@@ -140,6 +140,20 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-trend-flat{color:var(--muted);font-weight:600}
 .lab-value-ok{color:var(--green);font-weight:600}
 .lab-value-alert{color:var(--red);font-weight:600}
+.wm-panel{border:1px solid var(--line);border-radius:12px;background:var(--panel2);margin-bottom:12px;overflow:hidden}
+.wm-panel>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
+.wm-panel>summary::-webkit-details-marker{display:none}
+.wm-title{font-size:14px;font-weight:600;color:var(--text)}
+.wm-sub{font-size:11px;color:var(--muted)}
+.wm-body{padding:0 14px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wm-section{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--panel)}
+.wm-section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.wm-count{background:var(--panel2);border-radius:99px;padding:1px 7px;font-size:11px;border:1px solid var(--line)}
+.wm-item{padding:5px 0;border-bottom:1px solid var(--line);display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.wm-item:last-child{border-bottom:none;padding-bottom:0}
+.wm-name{font-size:13px;color:var(--text);font-weight:500}
+.wm-value{font-size:12px;font-weight:600}
+.wm-meta{font-size:11px;color:var(--muted)}
 details.sec summary{cursor:pointer;user-select:none;color:var(--text)}
 details.sec[open] summary{margin-bottom:6px}
 .briefing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
@@ -168,6 +182,7 @@ details.sec[open] summary{margin-bottom:6px}
   .lab-summary-controls{grid-template-columns:1fr 1fr}
   .controls{grid-template-columns:1fr 1fr}
   .briefing-grid{grid-template-columns:1fr}
+  .wm-body{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -242,6 +257,7 @@ details.sec[open] summary{margin-bottom:6px}
         </label>
         <div id="labSummaryStats" class="muted"></div>
       </div>
+      <div id="labWhatMattersPanel"></div>
       <div id="labSummaryPanel" class="muted">Загрузка...</div>
     </div></div>
   </div>
@@ -1112,6 +1128,16 @@ function labNormText(value){
 function labTextHasAny(text, terms){
   return (terms || []).some(term => text.includes(labNormText(term)));
 }
+function labTextHasAnyWord(text, terms){
+  // \b doesn't cover Cyrillic in JS, so we use explicit non-alphanumeric boundaries.
+  // This prevents 'пв' from matching inside 'лпвп', fixing false Коагулограмма matches.
+  // Lab terms only contain letters/digits/spaces/dashes/parens — we escape only parens.
+  return (terms || []).some(term => {
+    const t = labNormText(term).replace(/[()+]/g, '\\$&');
+    const boundary = '[^\\u0400-\\u04FFa-z0-9]';
+    return new RegExp('(?:^|' + boundary + ')' + t + '(?:' + boundary + '|$)').test(text);
+  });
+}
 
 function classifyLabGroup(row, displayName){
   const analyteId = labNormText(row?.analyte_id || '');
@@ -1121,8 +1147,8 @@ function classifyLabGroup(row, displayName){
   const haystack = `${section} ${name} ${rawName}`;
   for(const rule of LAB_GROUP_RULES){
     if((rule.analyteIds || []).includes(analyteId)) return rule.label;
-    if(labTextHasAny(section, rule.section || [])) return rule.label;
-    if(labTextHasAny(haystack, rule.terms || [])) return rule.label;
+    if(labTextHasAny(section, rule.section || [])) return rule.label;      // prefix match for PDF section names
+    if(labTextHasAnyWord(haystack, rule.terms || [])) return rule.label;  // word-boundary match for analyte names
   }
   return 'Прочее';
 }
@@ -1287,9 +1313,12 @@ function renderLabSummaryTable(items, options = {}){
         <div style="padding:0 8px 8px">${renderLabSummaryTableMarkup(collapsedRows)}</div>
       </details>
     ` : '';
+    const sectionCountLabel = (collapseLowUtility && collapsedRows.length && visibleRows.length)
+      ? `${visibleRows.length} · <span style="color:var(--muted)">${collapsedRows.length} ↓</span>`
+      : `${rows.length}`;
     parts.push(`
       <details class="lab-section" open>
-        <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${rows.length}</span></summary>
+        <summary><span class="lab-section-title">${e(g)}</span><span class="lab-section-count">${sectionCountLabel}</span></summary>
         <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
         ${collapsedBlock}
       </details>
@@ -1350,11 +1379,78 @@ function renderLabSummary(){
   renderLabSummaryTable(filtered, { collapseLowUtility });
 }
 
+function renderWhatMatters(rows, years){
+  const el = document.getElementById('labWhatMattersPanel');
+  if(!el) return;
+  const today = new Date().toISOString().slice(0,10);
+
+  const lastDate = r => Object.values(r.by_year||{}).map(p=>p?.date||'').filter(Boolean).sort().pop()||'';
+  const daysAgo = d => d ? Math.floor((new Date(today)-new Date(d))/86400000) : null;
+
+  // 1. Текущие отклонения: аномальные + есть недавние измерения
+  const abnormal = rows
+    .filter(r => Number(r.abnormal_count||0) > 0 && Number(r.usefulness_recent_present||0) > 0)
+    .sort((a,b) => Number(b.abnormal_count)-Number(a.abnormal_count));
+
+  // 2. Core маркеры давно не сдавались (>365 дней)
+  const overdue = rows
+    .filter(r => Number(r.usefulness_core_bonus||0) >= 14)
+    .map(r => ({ r, last: lastDate(r), days: daysAgo(lastDate(r)) }))
+    .filter(x => x.days === null || x.days > 365)
+    .sort((a,b) => (b.days||9999)-(a.days||9999));
+
+  if(!abnormal.length && !overdue.length){ el.innerHTML=''; return; }
+
+  const sections = [];
+
+  if(abnormal.length){
+    const items = abnormal.map(r => {
+      const last = lastDate(r);
+      const lastPt = Object.values(r.by_year||{}).find(p=>p?.date===last);
+      const val = lastPt?.value_text || '';
+      const ref = r.latest_reference ? `реф: ${r.latest_reference}` : '';
+      const episodes = Number(r.abnormal_count||0);
+      return `<div class="wm-item">
+        <span class="wm-name">${e(r.analyte_name)}</span>
+        <span class="wm-value lab-value-alert">${e(val)}</span>
+        <span class="wm-meta">${e(ref)}${ref&&last?' · ':''} ${e(last)}${episodes>1?' · '+episodes+' эп.':''}</span>
+      </div>`;
+    }).join('');
+    sections.push(`<div class="wm-section">
+      <div class="wm-section-title"><span class="lab-value-alert">↑↓</span> Отклонения <span class="wm-count">${abnormal.length}</span></div>
+      ${items}
+    </div>`);
+  }
+
+  if(overdue.length){
+    const items = overdue.map(({r,last,days}) => {
+      const ago = days!=null ? `${Math.round(days/30)} мес. назад` : 'нет данных';
+      return `<div class="wm-item">
+        <span class="wm-name">${e(r.analyte_name)}</span>
+        <span class="wm-meta">${e(last||'—')} · ${e(ago)}</span>
+      </div>`;
+    }).join('');
+    sections.push(`<div class="wm-section">
+      <div class="wm-section-title"><span style="color:var(--amber)">⏱</span> Давно не сдавался <span class="wm-count">${overdue.length}</span></div>
+      ${items}
+    </div>`);
+  }
+
+  el.innerHTML = `<details class="wm-panel">
+    <summary>
+      <span class="wm-title">Что важно</span>
+      <span class="wm-sub">обзор · не является медицинским заключением</span>
+    </summary>
+    <div class="wm-body">${sections.join('')}</div>
+  </details>`;
+}
+
 function rebuildLabSummaryFromFacts(){
   const built = buildLabSummaryRows(labSummaryFacts);
   labSummaryRows = built.rows || [];
   labSummaryYears = built.years || [];
   labSummaryDuplicateStats = built.duplicate_stats || { total: 0, visible: 0, hidden: 0 };
+  renderWhatMatters(labSummaryRows, labSummaryYears);
   renderLabSummary();
 }
 
