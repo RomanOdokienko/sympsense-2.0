@@ -105,13 +105,14 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .lab-kind{display:inline-flex;align-items:center;justify-content:center;min-width:34px;max-width:100%;box-sizing:border-box;padding:2px 7px;border-radius:999px;border:1px solid #3a4158;background:#202534;color:#aeb5ca;font-size:11px;font-weight:600;line-height:1.25;white-space:nowrap}
 .lab-value{display:inline-block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .lab-reference{display:inline-block;max-width:100%;font-size:12px;color:#b9bfd0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
-.lab-statbar{display:flex;gap:6px;align-items:center;justify-content:flex-end;flex-wrap:wrap;font-size:12px}
-.lab-stat{display:inline-flex;align-items:baseline;gap:4px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#202534;color:var(--muted);white-space:nowrap}
-.lab-stat b{font-size:12px;color:#d8dce8;font-weight:600}
-.lab-stat-alert{border-color:#573142;background:#281b27;color:#d6a2ad}
-.lab-stat-high{border-color:#21543c;background:#162a20;color:#93d1ab}
-.lab-stat-low{border-color:#42495f;background:#1a1f2c;color:#98a0b7}
-.lab-section{border:1px solid #30374c;border-left-width:3px;border-radius:8px;overflow:hidden;margin-top:8px}
+.lab-statbar{display:flex;gap:14px;align-items:center;font-size:13px;flex-shrink:0}
+.lab-stat{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap;color:var(--muted)}
+.lab-stat b{font-weight:600;font-size:13px}
+.lab-stat-alert b{color:#f87171}
+.lab-stat-high b{color:#4ade80}
+.lab-stat-muted b{color:var(--muted)}
+.lab-stat-sep{color:var(--line);font-size:16px;line-height:1}
+.lab-section{border:1px solid #30374c;border-left-width:3px;border-radius:8px;overflow:hidden;margin-top:14px}
 .lab-section summary{list-style:none;display:flex;align-items:center;gap:8px;padding:7px 10px;color:#d8dce8;border-bottom:0px solid #30374c}
 .lab-section[open] summary{border-bottom-width:1px}
 .lab-section summary::-webkit-details-marker{display:none}
@@ -135,13 +136,20 @@ tbody#rows tr:hover{background:var(--panel2);cursor:pointer}
 .link-btn{font-size:12px;padding:3px 8px;border:1px solid var(--line);border-radius:6px;background:var(--panel2);color:var(--muted);cursor:pointer}
 .link-btn:hover{border-color:#1e3a6a;color:var(--blue)}
 .queue-controls{display:grid;grid-template-columns:1.1fr 0.8fr 0.6fr 0.6fr;gap:6px;margin-bottom:8px}
-.lab-summary-controls{display:grid;grid-template-columns:minmax(220px,1.3fr) minmax(150px,.7fr) minmax(130px,.55fr) minmax(260px,1fr);gap:8px;margin-bottom:8px;align-items:stretch}
+.lab-header-row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.lab-header-actions{display:flex;align-items:center;gap:8px}
+.lab-mode-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer;user-select:none}
+.lab-mode-pill input{accent-color:var(--blue);margin:0;width:13px;height:13px;flex-shrink:0}
+.lab-mode-pill:hover{border-color:#4b5578;color:var(--text)}
+.lab-summary-controls{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.lab-summary-controls input[type=text]{flex:1;min-width:180px}
+.lab-summary-controls select{min-width:160px}
 .lab-trend-up{color:var(--red);font-weight:600}
 .lab-trend-down{color:var(--blue);font-weight:600}
 .lab-trend-flat{color:var(--muted);font-weight:600}
 .lab-value-ok{color:var(--green);font-weight:600}
 .lab-value-alert{color:var(--red);font-weight:600}
-.wm-panel{border:1px solid var(--line);border-radius:12px;background:var(--panel2);margin-bottom:12px;overflow:hidden}
+.wm-panel{border:1px solid var(--line);border-radius:12px;background:var(--panel2);margin-top:16px;margin-bottom:20px;overflow:hidden}
 .wm-panel>summary{list-style:none;display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none}
 .wm-panel>summary::-webkit-details-marker{display:none}
 .wm-title{font-size:14px;font-weight:600;color:var(--text)}
@@ -175,14 +183,29 @@ details.sec[open] summary{margin-bottom:6px}
 .prio-low{background:#0a1428;color:var(--blue);border-color:#1e3a6a}
 .briefing-checklist{margin:8px 0 0 0;padding-left:18px}
 .briefing-checklist li{margin:6px 0}
+.hc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.hc-section{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel2)}
+.hc-section-title{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.hc-item{padding:7px 0;border-bottom:1px solid var(--line)}
+.hc-item:last-child{border-bottom:none;padding-bottom:0}
+.hc-item-name{font-size:13px;font-weight:600;color:var(--text)}
+.hc-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.hc-sys-group{margin-bottom:14px}.hc-sys-group:last-child{margin-bottom:0}
+.hc-sys-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.hc-badge{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:1px 7px;font-size:11px;color:var(--muted)}
+.hc-trend-up{color:var(--red);font-weight:700}
+.hc-trend-down{color:var(--green);font-weight:700}
+.hc-trend-flat{color:var(--muted)}
 @media(max-width:1180px){
   .docs-layout{grid-template-columns:1fr}
   .detail-panel{position:static;max-height:none;overflow:visible}
   .card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .queue-controls{grid-template-columns:1fr 1fr}
-  .lab-summary-controls{grid-template-columns:1fr 1fr}
+  .lab-summary-controls{flex-wrap:wrap}
+  .lab-summary-controls input[type=text]{min-width:140px}
   .controls{grid-template-columns:1fr 1fr}
   .briefing-grid{grid-template-columns:1fr}
+  .hc-grid{grid-template-columns:1fr}
   .wm-body{grid-template-columns:1fr}
 }
 </style>
@@ -191,7 +214,7 @@ details.sec[open] summary{margin-bottom:6px}
 <div class="wrap">
   <div style="display:flex;justify-content:space-between;align-items:baseline">
     <div class="h1">Sympsense 2.0</div>
-    <a href="/longevity" style="font-size:13px;color:var(--muted);text-decoration:none">Longevity ↗</a>
+    <a href="/longevity" style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--green);text-decoration:none;border:1px solid #166534;padding:3px 10px;border-radius:6px;opacity:.85">Longevity ↗</a>
   </div>
   <div class="muted" id="qualityLine" style="font-size:12px;margin-top:2px"></div>
   <div id="notice" class="notice"></div>
@@ -199,15 +222,12 @@ details.sec[open] summary{margin-bottom:6px}
   <div class="toolbar">
     <div class="tabbar">
       <button class="tab-btn active" data-view="briefing">Сводка</button>
+      <button class="tab-btn" data-view="health">Карта здоровья</button>
       <button class="tab-btn" data-view="labs">Анализы</button>
       <button class="tab-btn" data-view="docs">Документы</button>
       <button class="tab-btn" data-view="review" data-advanced="true">Проверка фактов</button>
       <button class="tab-btn" data-view="analytics" data-advanced="true">Граф связей</button>
     </div>
-    <label class="switch">
-      <input id="advancedModeToggle" type="checkbox"/>
-      Экспертный режим
-    </label>
   </div>
 
   <div id="view-docs" class="view">
@@ -235,15 +255,22 @@ details.sec[open] summary{margin-bottom:6px}
 
   <div id="view-labs" class="view">
     <div class="panel"><div class="body">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div>
-          <div style="font-size:15px;font-weight:600;color:var(--text)">Анализы: динамика по годам</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">по каждому показателю — значения по годам; пусто — не сдавался</div>
+      <div class="lab-header-row1">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">Анализы: динамика по годам</div>
+        <div class="lab-header-actions">
+          <label class="lab-mode-pill" id="labDupePill">
+            <input id="labSummaryShowDuplicatesToggle" type="checkbox"/>
+            <span id="labDupeLabel">дубли скрыты</span>
+          </label>
+          <label class="lab-mode-pill">
+            <input id="advancedModeToggle" type="checkbox"/>
+            Экспертный
+          </label>
+          <button id="labSummaryRefreshBtn" class="link-btn" title="Обновить">↺</button>
         </div>
-        <button id="labSummaryRefreshBtn" class="link-btn" title="Обновить">↺</button>
       </div>
       <div class="lab-summary-controls">
-        <input id="labSummarySearch" placeholder="Поиск по показателю"/>
+        <input id="labSummarySearch" type="text" placeholder="Поиск по показателю"/>
         <select id="labSummaryFlagFilter">
           <option value="">Все показатели</option>
           <option value="abnormal">Есть отклонения</option>
@@ -252,11 +279,7 @@ details.sec[open] summary{margin-bottom:6px}
           <option value="medium">Средняя полезность</option>
           <option value="low">Низкая полезность</option>
         </select>
-        <label class="switch" style="padding:0 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel2)">
-          <input id="labSummaryShowDuplicatesToggle" type="checkbox"/>
-          Показать дубли
-        </label>
-        <div id="labSummaryStats" class="muted"></div>
+        <div id="labSummaryStats"></div>
       </div>
       <div id="labWhatMattersPanel"></div>
       <div id="labSummaryPanel" class="muted">Загрузка...</div>
@@ -312,6 +335,16 @@ details.sec[open] summary{margin-bottom:6px}
     </div></div>
   </div>
 
+  <div id="view-health" class="view">
+    <div class="panel"><div class="body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">Карта здоровья</div>
+        <button id="healthCardRefreshBtn" class="link-btn" title="Обновить">↺</button>
+      </div>
+      <div id="healthCardPanel" class="muted">Загрузка...</div>
+    </div></div>
+  </div>
+
   <div id="view-briefing" class="view active">
     <div class="panel"><div class="body">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -340,6 +373,7 @@ let labSummaryFacts = [];
 let labSummaryRows = [];
 let labSummaryYears = [];
 let labSummaryDuplicateStats = { total: 0, visible: 0, hidden: 0 };
+let briefingPayloadGlobal = null;
 
 const FALLBACK_API_BASE = 'http://127.0.0.1:8000';
 const API_BASE = location.protocol === 'file:' ? FALLBACK_API_BASE : window.location.origin;
@@ -654,7 +688,6 @@ async function probeDeleteApi(){
     const res = await fetch(deleteApiUrl('/api/health'), { method:'GET' });
     if(!res.ok) throw new Error(`HTTP ${res.status}`);
     deleteApiReady = true;
-    setNotice('API чтения и удаления доступны.', false);
   } catch(err) {
     deleteApiReady = false;
     setNotice(`API чтения доступен, удаление недоступно: ${err.message}`, true);
@@ -1334,7 +1367,7 @@ function renderLabSummaryTable(items, options = {}){
     const gc = labGroupColor(g);
     const tint = `${gc}12`;
     parts.push(`
-      <details class="lab-section" open style="border-left-color:${gc}">
+      <details class="lab-section" style="border-left-color:${gc}">
         <summary style="background:${tint}"><span class="lab-section-title" style="color:${gc}">${e(g)}</span><span class="lab-section-count">${sectionCountLabel}</span></summary>
         <div style="margin-top:8px">${renderLabSummaryTableMarkup(tableRows)}</div>
         ${collapsedBlock}
@@ -1378,19 +1411,26 @@ function renderLabSummary(){
   const collapsedLowUtility = collapseLowUtility ? lowUtility : 0;
   const st = labSummaryDuplicateStats || {};
   const showingDuplicates = !!labSummaryShowDuplicatesToggleEl?.checked;
+  const hiddenDupes = Number(st.hidden || 0);
   const duplicateTitle = st.hidden
-    ? `${showingDuplicates ? 'Показано' : 'Скрыто'} дублей: ${Number(st.hidden || 0)}; внутри документа: ${Number(st.intra_document || 0)}; между документами: ${Number(st.cross_document || 0)}`
+    ? `${showingDuplicates ? 'Показано' : 'Скрыто'} дублей: ${hiddenDupes}; внутри документа: ${Number(st.intra_document || 0)}; между документами: ${Number(st.cross_document || 0)}`
     : 'Дублей нет';
-  const duplicateLabel = showingDuplicates ? 'дубли показаны' : 'дубли скрыты';
+  const dupeLabelEl = document.getElementById('labDupeLabel');
+  if(dupeLabelEl){
+    if(hiddenDupes > 0){
+      dupeLabelEl.textContent = showingDuplicates ? `${hiddenDupes} дубл. показаны` : `${hiddenDupes} дубл. скрыты`;
+      dupeLabelEl.title = duplicateTitle;
+      document.getElementById('labDupePill').style.display = '';
+    } else {
+      document.getElementById('labDupePill').style.display = 'none';
+    }
+  }
   labSummaryStatsEl.innerHTML = `
     <div class="lab-statbar">
-      <span class="lab-stat" title="Показатели"><b>${filtered.length}</b>/<span>${labSummaryRows.length}</span> показ.</span>
-      <span class="lab-stat" title="Строки данных"><b>${Number(st.visible || 0)}</b>/<span>${Number(st.total || 0)}</span> строк</span>
+      <span class="lab-stat-sep">|</span>
+      <span class="lab-stat lab-stat-alert" title="Показатели с хотя бы одним значением вне нормы"><b>${abnormalSeries}</b> откл.</span>
       <span class="lab-stat lab-stat-high" title="Строки с высокой полезностью для обзора"><b>${highUtility}</b> выс.</span>
-      <span class="lab-stat lab-stat-low" title="Строки с низкой полезностью: редкие, качественные или слабодинамичные"><b>${lowUtility}</b> низк.</span>
-      <span class="lab-stat" title="Низкополезные строки, свернутые по умолчанию"><b>${collapsedLowUtility}</b> сверн.</span>
-      <span class="lab-stat" title="${e(duplicateTitle)}"><b>${Number(st.hidden || 0)}</b> ${e(duplicateLabel)}</span>
-      <span class="lab-stat lab-stat-alert" title="Показатели с отклонениями"><b>${abnormalSeries}</b> откл.</span>
+      <span class="lab-stat lab-stat-muted" title="Показатели в текущем фильтре"><b>${filtered.length}</b>/${labSummaryRows.length} показ.</span>
     </div>
   `;
   renderLabSummaryTable(filtered, { collapseLowUtility });
@@ -1601,6 +1641,8 @@ async function loadPatientBriefing(){
   const briefingRes = await fetch(readApiUrl('/v1/reports/patient-briefing/v1'));
   if(!briefingRes.ok) throw new Error(`Ошибка API сводки: HTTP ${briefingRes.status}`);
   const payload = await briefingRes.json();
+  briefingPayloadGlobal = payload;
+  renderHealthCard();
   const quality = payload.quality || {};
   const labs = payload.lab_attention_items || [];
   const findings = payload.clinical_findings || {};
@@ -1742,6 +1784,148 @@ async function loadPatientBriefing(){
     </details>
     ${qualityNote ? `<div class="sec"><div class="k">Комментарий по качеству данных</div><div class="v">${e(qualityNote)}</div></div>` : ''}
     <div class="sec"><div class="k">Сводное качество</div><div class="v">${qualityChip(quality.overall_status||'unknown')} | высокий приоритет: ${e(highCount)} | средний: ${e(mediumCount)} | низкий: ${e(lowCount)} | всего приоритетов: ${e(prioritiesCount)}</div></div>
+  `;
+}
+
+function classifyBodySystem(title){
+  const t = (title||'').toLowerCase();
+  if(/шейн|позвон|плечев|бурсит|тендинит|эпикондилит|артроз|грушевидн|капсульно|кистев|сустав|запяст|колен|бедр|надмыщелк|вертел|импиндж/.test(t)) return 'Опорно-двигательная';
+  if(/варикоз(?!еле)|флебо|тромб|телеангио/.test(t)) return 'Сосудистая';
+  if(/миопия|глаз/.test(t)) return 'Зрение';
+  if(/варикоцеле/.test(t)) return 'Урология';
+  if(/ринит|нос/.test(t)) return 'ЛОР';
+  return 'Прочее';
+}
+
+function labTrendDir(row){
+  const byYear = row.by_year || {};
+  const years = Object.keys(byYear).sort();
+  if(years.length < 2) return 'flat';
+  let curr = null, prev = null;
+  for(let i = years.length - 1; i >= 0; i--){
+    const v = parseFloat((byYear[years[i]] || {}).value || '');
+    if(!isNaN(v)){ if(curr === null) curr = v; else { prev = v; break; } }
+  }
+  if(prev === null || curr === null || Math.abs(prev) === 0) return 'flat';
+  const diff = (curr - prev) / Math.abs(prev);
+  return diff > 0.05 ? 'up' : diff < -0.05 ? 'down' : 'flat';
+}
+
+function renderHealthCard(){
+  const el = document.getElementById('healthCardPanel');
+  if(!el) return;
+  const payload = briefingPayloadGlobal;
+  if(!payload){ el.innerHTML = '<div class="muted">Нет данных. Откройте вкладку Сводка для загрузки.</div>'; return; }
+
+  const cs = payload.current_state || {};
+  const active = cs.active_conditions || [];
+  const longTerm = cs.long_term_conditions || [];
+  const limits = cs.functional_limits || [];
+  const priorities = (payload.clinical_findings || {}).prioritized_findings || [];
+
+  const highItems = priorities.filter(x => (x.priority||'') === 'high');
+  const activeDedup = active.filter(a => !highItems.find(h => h.title === a.title));
+  const topItems = [...highItems, ...activeDedup].slice(0, 10);
+
+  const SYS_ORDER = ['Опорно-двигательная','Сосудистая','Зрение','Урология','ЛОР','Прочее'];
+  const sysGroups = {};
+  for(const c of longTerm){
+    const s = classifyBodySystem(c.title||'');
+    if(!sysGroups[s]) sysGroups[s] = [];
+    sysGroups[s].push(c);
+  }
+
+  const abnormalRows = (labSummaryRows||[])
+    .filter(r => Number(r.abnormal_count||0) > 0)
+    .sort((a,b) => Number(b.abnormal_count||0) - Number(a.abnormal_count||0));
+
+  const today = new Date();
+  const gapRows = (labSummaryRows||[])
+    .filter(r => r.usefulness_level === 'high' && Number(r.abnormal_count||0) === 0)
+    .filter(r => {
+      const last = Object.values(r.by_year||{}).map(v=>v?.date||'').filter(Boolean).sort().pop()||'';
+      return last && (today - new Date(last)) / 86400000 > 365;
+    })
+    .sort((a,b) => {
+      const da = Object.values(a.by_year||{}).map(v=>v?.date||'').filter(Boolean).sort().pop()||'';
+      const db = Object.values(b.by_year||{}).map(v=>v?.date||'').filter(Boolean).sort().pop()||'';
+      return da < db ? -1 : 1;
+    });
+
+  const hcItem = (name, meta='') =>
+    `<div class="hc-item"><div class="hc-item-name">${e(name)}</div>${meta ? `<div class="hc-item-meta">${meta}</div>` : ''}</div>`;
+
+  el.innerHTML = `
+    <div class="hc-grid">
+      <div class="hc-section">
+        <div class="hc-section-title">Активные проблемы</div>
+        ${topItems.length ? topItems.map(x => {
+          const pv = priorityVisual(x.priority||'medium');
+          return `<div class="hc-item">
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+              <div class="hc-item-name">${e(x.title||'')}</div>
+              ${x.priority ? `<span class="prio-chip ${pv.cls}" style="flex-shrink:0;margin-top:1px">${e(pv.label)}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('') : '<div class="muted">Нет данных</div>'}
+      </div>
+      <div class="hc-section">
+        <div class="hc-section-title">Хронический фон</div>
+        ${SYS_ORDER.filter(s => sysGroups[s]).map(s => `
+          <div class="hc-sys-group">
+            <div class="hc-sys-label">${e(s)} <span class="hc-badge">${sysGroups[s].length}</span></div>
+            ${sysGroups[s].map(c => hcItem(c.title||'')).join('')}
+          </div>`).join('') || '<div class="muted">Нет данных</div>'}
+      </div>
+    </div>
+
+    ${abnormalRows.length ? `<div class="hc-section" style="margin-bottom:12px">
+      <div class="hc-section-title">Лабораторные отклонения <span class="hc-badge">${abnormalRows.length}</span></div>
+      <table style="width:100%;font-size:13px;border-collapse:collapse">
+        <thead><tr style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em">
+          <th style="text-align:left;padding:4px 0;font-weight:600">Показатель</th>
+          <th style="text-align:right;padding:4px 8px;font-weight:600">Эпизоды</th>
+          <th style="text-align:right;padding:4px 8px;font-weight:600">Последнее</th>
+          <th style="text-align:right;padding:4px 0;font-weight:600">Тренд</th>
+        </tr></thead>
+        <tbody>${abnormalRows.slice(0,15).map(r => {
+          const td = labTrendDir(r);
+          const trendHtml = td==='up' ? '<span class="hc-trend-up">↑</span>' : td==='down' ? '<span class="hc-trend-down">↓</span>' : '<span class="hc-trend-flat">—</span>';
+          const lastEntry = Object.values(r.by_year||{}).filter(v=>v?.value).sort((a,b)=>(a.date||'')<(b.date||'')?1:-1)[0];
+          const lastVal = lastEntry ? e((lastEntry.value||'') + (lastEntry.unit ? ' '+lastEntry.unit : '')) : '—';
+          return `<tr style="border-top:1px solid var(--line)">
+            <td style="padding:7px 0;color:var(--text)">${e(r.display_label||'')}</td>
+            <td style="text-align:right;padding:7px 8px;color:var(--muted)">${r.abnormal_count}</td>
+            <td style="text-align:right;padding:7px 8px;color:var(--text);font-weight:600">${lastVal}</td>
+            <td style="text-align:right;padding:7px 0">${trendHtml}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>` : ''}
+
+    <div class="hc-grid">
+      ${gapRows.length ? `<div class="hc-section">
+        <div class="hc-section-title">Пробелы — не сдавалось &gt;1 года</div>
+        ${gapRows.slice(0,8).map(r => {
+          const last = Object.values(r.by_year||{}).map(v=>v?.date||'').filter(Boolean).sort().pop()||'';
+          const months = last ? Math.round((today - new Date(last)) / (86400000*30)) : null;
+          return hcItem(r.display_label||'', months !== null ? months+' мес. назад' : '');
+        }).join('')}
+      </div>` : '<div></div>'}
+
+      ${limits.length ? `<div class="hc-section">
+        <div class="hc-section-title">Ограничения</div>
+        ${limits.slice(0,7).map(x => {
+          const colon = x.indexOf(':');
+          const area = colon > 0 ? x.slice(0, colon) : null;
+          const text = colon > 0 ? x.slice(colon+1).trim() : x;
+          return `<div class="hc-item">
+            ${area ? `<div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${e(area)}</div>` : ''}
+            <div style="font-size:13px;color:var(--text)">${e(text)}</div>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+    </div>
   `;
 }
 
@@ -2047,6 +2231,8 @@ if(factStateFilterEl) factStateFilterEl.addEventListener('change', ()=>loadFactQ
 if(factLimitFilterEl) factLimitFilterEl.addEventListener('change', ()=>loadFactQueue());
 if(factQueueRefreshBtn) factQueueRefreshBtn.addEventListener('click', ()=>loadFactQueue());
 if(briefingRefreshBtn) briefingRefreshBtn.addEventListener('click', ()=>loadPatientBriefing());
+const healthCardRefreshBtn = document.getElementById('healthCardRefreshBtn');
+if(healthCardRefreshBtn) healthCardRefreshBtn.addEventListener('click', ()=>loadPatientBriefing());
 if(briefingBuildBtn) briefingBuildBtn.addEventListener('click', ()=>rebuildPatientBriefing());
 if(labSummarySearchEl) labSummarySearchEl.addEventListener('input', ()=>renderLabSummary());
 if(labSummaryFlagFilterEl) labSummaryFlagFilterEl.addEventListener('change', ()=>renderLabSummary());
